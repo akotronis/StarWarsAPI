@@ -4,4 +4,7 @@ version = "0.1.0"
 description = "Star Wars API"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "django>=5.2.6",
+    "requests>=2.32.5",
+]
