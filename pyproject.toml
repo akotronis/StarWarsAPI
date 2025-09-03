@@ -1,0 +1,7 @@
+[project]
+name = "starwarsapi"
+version = "0.1.0"
+description = "Star Wars API"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
