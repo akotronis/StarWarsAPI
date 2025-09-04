@@ -12,5 +12,8 @@ wheels/
 # Database files
 *.sqlite3
 
+# Secrets
+*.env
+
 # Development notes
 Notes.txt
