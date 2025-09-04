@@ -1,0 +1,4 @@
+SWAPI_BASE_URL = 'https://swapi.info/api'
+SWAPI_FILMS_URL = f'{SWAPI_BASE_URL}/films'
+SWAPI_CHARACTERS_URL = f'{SWAPI_BASE_URL}/people'
+SWAPI_STARSHIPS_URL = f'{SWAPI_BASE_URL}/starships'

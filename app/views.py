@@ -1,10 +1,11 @@
-from rest_framework import status, viewsets
-from rest_framework.pagination import PageNumberPagination
+from rest_framework import viewsets
 from rest_framework.response import Response
 
+from . import constants
 from . import mixins
 from . import models
 from . import serializers
+from . import services
 
 
 class FilmViewSet(mixins.CommonFunctionalityViewsetMixin, viewsets.ModelViewSet):
@@ -46,5 +47,10 @@ class SWAPIFetchPopulateView(viewsets.ViewSet):
     """
     Fetch resources "films, characters, starships" from SWAPI and populate database
     """
+    @services.exception_handler
     def list(self, request):
+        films_data = services.fetch_and_validate_data(constants.SWAPI_FILMS_URL, serializers.SWAPIFilmSerializer)
+        characters_data = services.fetch_and_validate_data(constants.SWAPI_CHARACTERS_URL, serializers.SWAPICharacterSerializer)
+        starships_data = services.fetch_and_validate_data(constants.SWAPI_STARSHIPS_URL, serializers.SWAPIStarshipSerializer)
+        services.populate_database(films_data, characters_data, starships_data)
         return Response({'test': 1})
