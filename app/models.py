@@ -7,6 +7,7 @@ class Film(models.Model):
     director = models.CharField(blank=True, max_length=100)
     release_date = models.DateField(blank=True, null=True)
     created = models.DateTimeField(blank=True, null=True)
+    swapi_url = models.URLField(blank=True, null=True)
     starships = models.ManyToManyField('Starship', blank=True, related_name='films')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -20,6 +21,7 @@ class Character(models.Model):
     height = models.FloatField(blank=True, null=True)
     gender = models.CharField(blank=True, max_length=50)
     created = models.DateTimeField(blank=True, null=True)
+    swapi_url = models.URLField(blank=True, null=True)
     films = models.ManyToManyField(Film, blank=True, related_name='characters')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -34,7 +36,10 @@ class Starship(models.Model):
     cost_in_credits = models.BigIntegerField(blank=True, null=True)
     hyperdrive_rating = models.FloatField(blank=True, null=True)
     created = models.DateTimeField(blank=True, null=True)
-    character = models.ForeignKey(Character, on_delete=models.CASCADE, related_name='starships')
+    swapi_url = models.URLField(blank=True, null=True)
+    characters = models.ManyToManyField(Character, blank=True, related_name='starships')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f'({self.pk}) Name: {self.name}, Model: {self.model}'
