@@ -45,6 +45,7 @@ DJANGO_APPS = [
 
 THIRD_PARTY_APPS = [
     "rest_framework",
+    "drf_spectacular"
 ]
 
 CUSTOM_APPS = [
@@ -137,6 +138,21 @@ STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 REST_FRAMEWORK = {
-    'PAGE_SIZE': 2,
-    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination'
+    "PAGE_SIZE": 2,
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+# import drf_spectacular.openapi.sh
+SWAGGER_DESCRIPTION = (
+    "**Star Wars API**"
+    "\n\n1. ..."
+    "\n\n2. ..."
+)
+
+SPECTACULAR_SETTINGS = {
+    # Basic Settings
+    "TITLE": "Star Wars API",
+    "DESCRIPTION": SWAGGER_DESCRIPTION,
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
 }
