@@ -15,3 +15,19 @@ class CommonFunctionalityViewsetMixin:
         if (filter_field_value := self.request.query_params.get('contains')):
             return queryset.filter(**{f'{self.filter_field}__contains': filter_field_value})
         return queryset
+  
+    
+class HandleNumericsSerializerMixin:
+    """
+    Mixin with common serialzier functionality:
+    Handle numeric values coming in as non-digit strings.
+    Convert them to `None`.
+    Inherit from this class to avoid code repetition.
+    """
+    numeric_fields_as_strings = []    
+
+    def to_internal_value(self, data):
+        for field in self.numeric_fields_as_strings:
+            if data.get(field) in ['unknown', 'n/a']:
+                data[field] = None
+        return super().to_internal_value(data)
