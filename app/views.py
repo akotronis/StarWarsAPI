@@ -1,3 +1,6 @@
+import time
+
+from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import viewsets
 from rest_framework.response import Response
 
@@ -6,8 +9,12 @@ from . import mixins
 from . import models
 from . import serializers
 from . import services
+from . import swagger
+import swapi.utils
 
 
+@extend_schema(description=' ', tags=['Resource: Films'])
+@extend_schema_view(list=extend_schema(parameters=swagger.SWAGGER_QUERY_PARAMS))
 class FilmViewSet(mixins.CommonFunctionalityViewsetMixin, viewsets.ModelViewSet):
     """
     View for Film resource.
@@ -47,10 +54,27 @@ class SWAPIFetchPopulateView(viewsets.ViewSet):
     """
     Fetch resources "films, characters, starships" from SWAPI and populate database
     """
-    @services.exception_handler
+    @services.fetch_populate_exception_handler
     def list(self, request):
+        # Fetch SWAPI data
+        fetch_start_time = time.time()
         films_data = services.fetch_and_validate_data(constants.SWAPI_FILMS_URL, serializers.SWAPIFilmSerializer)
         characters_data = services.fetch_and_validate_data(constants.SWAPI_CHARACTERS_URL, serializers.SWAPICharacterSerializer)
         starships_data = services.fetch_and_validate_data(constants.SWAPI_STARSHIPS_URL, serializers.SWAPIStarshipSerializer)
+        fetch_elapsed = time.time() - fetch_start_time
+        
+        # Populate database
+        populate_start_time = time.time()
         services.populate_database(films_data, characters_data, starships_data)
-        return Response({'test': 1})
+        populate_elapsed = time.time() - populate_start_time
+
+        resource_names = ['Films', 'Characters', 'Starships']
+        managers = [models.Film.objects, models.Character.objects, models.Starship.objects]
+        model_counts = dict(zip(resource_names, map(lambda obj:obj.count(), managers)))
+        fetched_data = [films_data, characters_data, starships_data]
+        api_counts = dict(zip(resource_names, map(len, fetched_data)))
+        report = {
+            'Fetched SWAPI data successfully': {'time': swapi.utils.format_elapsed_time(fetch_elapsed), 'counts': model_counts},
+            'Populated database successfully': {'time': swapi.utils.format_elapsed_time(populate_elapsed), 'counts': api_counts},
+        }
+        return Response(report)
