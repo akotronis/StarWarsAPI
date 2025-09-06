@@ -1,13 +1,13 @@
 import functools
 
-from django.db import Error as DBError, transaction
+from django.db import Error as DBError
+from django.db import transaction
 from requests.exceptions import RequestException
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 
-from . import clients
-from . import models
+from . import clients, models
 
 
 def fetch_and_validate_data(url, serializer):

@@ -4,13 +4,9 @@ from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import viewsets
 from rest_framework.response import Response
 
-from . import constants
-from . import mixins
-from . import models
-from . import serializers
-from . import services
-from . import swagger
 import swapi.utils
+
+from . import constants, mixins, models, serializers, services, swagger
 
 
 @extend_schema(

@@ -1,6 +1,5 @@
 from drf_spectacular.utils import OpenApiParameter
 
-
 PAGE_QUERY_PARAM = OpenApiParameter(
     name="page",
     type=int,

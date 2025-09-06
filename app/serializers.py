@@ -1,7 +1,6 @@
 from rest_framework import serializers
 
-from . import mixins
-from . import models
+from . import mixins, models
 
 
 class FilmSerializer(serializers.ModelSerializer):

@@ -1,7 +1,7 @@
-from unittest.mock import patch, Mock
+from unittest.mock import Mock, patch
 
 from django.test import TestCase
-from requests.exceptions import HTTPError, Timeout, ConnectionError
+from requests.exceptions import ConnectionError, HTTPError, Timeout
 
 from ..clients import get_swapi_data
 
