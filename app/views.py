@@ -13,8 +13,8 @@ from . import swagger
 import swapi.utils
 
 
-@extend_schema(description=' ', tags=['Resource: Films'])
-@extend_schema_view(list=extend_schema(parameters=swagger.SWAGGER_QUERY_PARAMS))
+@extend_schema(description='Get **Film** resources from local database', tags=['Resource: Films'])
+@extend_schema_view(list=extend_schema(parameters=swagger.FILMS_QUERY_PARAMS))
 class FilmViewSet(mixins.CommonFunctionalityViewsetMixin, viewsets.ModelViewSet):
     """
     View for Film resource.
@@ -23,10 +23,12 @@ class FilmViewSet(mixins.CommonFunctionalityViewsetMixin, viewsets.ModelViewSet)
     - page number with "page=<number>"
     """
     serializer_class = serializers.FilmSerializer
-    queryset = models.Film.objects.all()
+    queryset = models.Film.objects.all().prefetch_related('starships', 'characters')
     filter_field = 'title'
 
 
+@extend_schema(description='Get **Character** resources from local database', tags=['Resource: Characters'])
+@extend_schema_view(list=extend_schema(parameters=swagger.CHARACTERS_QUERY_PARAMS))
 class CharacterViewSet(mixins.CommonFunctionalityViewsetMixin, viewsets.ModelViewSet):
     """
     View for Character resource.
@@ -35,9 +37,11 @@ class CharacterViewSet(mixins.CommonFunctionalityViewsetMixin, viewsets.ModelVie
     - page number with "page=<number>"
     """
     serializer_class = serializers.CharacterSerializer
-    queryset = models.Character.objects.all()
+    queryset = models.Character.objects.all().prefetch_related('films', 'starships')
 
 
+@extend_schema(description='Get **Starship** resources from local database', tags=['Resource: Starships'])
+@extend_schema_view(list=extend_schema(parameters=swagger.STARSHIPS_QUERY_PARAMS))
 class StarshipViewSet(mixins.CommonFunctionalityViewsetMixin, viewsets.ModelViewSet):
     """
     View for Starship resource.
@@ -46,10 +50,10 @@ class StarshipViewSet(mixins.CommonFunctionalityViewsetMixin, viewsets.ModelView
     - page number with "page=<number>"
     """
     serializer_class = serializers.StarshipSerializer
-    queryset = models.Starship.objects.all()
+    queryset = models.Starship.objects.all().prefetch_related('films', 'characters')
 
 
-# By using ViewSet, this can be registered via router and appear in the DRF Browser API root view
+@extend_schema(description=' ', tags=['Action: Fetch and populate local database'])
 class SWAPIFetchPopulateView(viewsets.ViewSet):
     """
     Fetch resources "films, characters, starships" from SWAPI and populate database

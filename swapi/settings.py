@@ -142,11 +142,11 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
-# import drf_spectacular.openapi.sh
+
 SWAGGER_DESCRIPTION = (
-    "**Star Wars API**"
-    "\n\n1. ..."
-    "\n\n2. ..."
+    "REST API providing access to Star Wars data from [Star Wars API](https://swapi.info/)"
+    "\n\n1. Fetch resources (**films**, **starships**, **characters**, and populate local database."
+    "\n\n2. Inspect resources from local database."
 )
 
 SPECTACULAR_SETTINGS = {
