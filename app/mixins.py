@@ -20,7 +20,7 @@ class CommonFunctionalityViewsetMixin:
 class HandleNumericsSerializerMixin:
     """
     Mixin with common serialzier functionality:
-    Handle numeric values coming in as non-digit strings.
+    Handle numeric values coming in as non-digit strings denoting missing.
     Convert them to `None`.
     Inherit from this class to avoid code repetition.
     """
