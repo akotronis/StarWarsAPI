@@ -184,7 +184,7 @@ def create_film_starship_relationships(films_data, film_mappings, starship_mappi
     
     for film_data in films_data:
         film = film_mappings.get(film_data['swapi_url'])
-        for starship_url in film_data['starships']:
+        for starship_url in film_data.get('starships', []):
             starship = starship_mappings.get(starship_url)
             if (starship := starship_mappings.get(starship_url)):
                 film_starship_obj = film_starship_table(film_id=film.id, starship_id=starship.id)
@@ -217,7 +217,7 @@ def create_character_film_relationships(characters_data, character_mappings, fil
     
     for character_data in characters_data:
         character = character_mappings.get(character_data['swapi_url'])
-        for film_url in character_data['films']:
+        for film_url in character_data.get('films', []):
             if (film := film_mappings.get(film_url)):
                 character_film_obj = character_film_table(character_id=character.pk, film_id=film.pk)
                 character_film_objects.append(character_film_obj)
@@ -251,7 +251,7 @@ def create_starship_character_relationships(starships_data, starship_mappings, c
     
     for starship_data in starships_data:
         starship = starship_mappings.get(starship_data['swapi_url'])
-        for character_url in starship_data['characters']:
+        for character_url in starship_data.get('characters', []):
             character = character_mappings.get(character_url)
             if (character := character_mappings.get(character_url)):
                 starship_character_obj = starship_character_table(starship_id=starship.id, character_id=character.id)
