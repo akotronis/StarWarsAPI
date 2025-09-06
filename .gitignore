@@ -15,5 +15,9 @@ wheels/
 # Secrets
 *.env
 
+# Coverage
+htmlcov
+.coverage
+
 # Development notes
 Notes.txt
