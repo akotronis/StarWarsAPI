@@ -65,3 +65,23 @@
 <p><img src="./resources/coverage-report.png" alt="Coverage Report" width="800"/></p>
 
 </details>
+
+<details>
+<summary><h2 style="display: inline;">Sample API screenshots</h2></summary>
+
+#### SWAPI Fetch Populate Success
+<p><img src="./resources/swapi-fetch-populate-success.png" alt="SWAPI Fetch Populate Success" width="800"/></p>
+
+#### SWAPI Fetch Poplate Sucess
+<p><img src="./resources/swapi-fetch-populate-validation-errors.png" alt="SWAPI Fetch Populate Validation Errors" width="800"/></p>
+
+#### Films Paginated Response
+<p><img src="./resources/films-paginated-response.png" alt="Films Paginated Response" width="800"/></p>
+
+#### Films Filter Param Search
+<p><img src="./resources/films-filter-param-search.png" alt="Films Filter Param Search" width="800"/></p>
+
+#### Swagger
+<p><img src="./resources/swagger.png" alt="Swagger" width="800"/></p>
+
+</details>
