@@ -1,6 +1,6 @@
 # Star Wars API
 
-<details open>
+<details>
 <summary><h2 style="display: inline;">Setup/Run and Testing Workflow</h2></summary>
 
 ### uv installation
@@ -42,7 +42,7 @@
 - Inspect _../StartWarsAPI/htmlcov/index.html_ coverage report
 </details>
 
-<details open>
+<details>
 <summary><h2 style="display: inline;">Design/Implementation details</h2></summary>
 
 ### Database schema
@@ -59,7 +59,7 @@
     - Traded temporary memory usage for database performance using in-memory mappings and bulk operations to minimize queries.
 </details>
 
-<details open>
+<details>
 <summary><h2 style="display: inline;">Coverage Report</h2></summary>
 
 <p><img src="./resources/coverage-report.png" alt="Coverage Report" width="800"/></p>
