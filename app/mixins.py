@@ -7,16 +7,19 @@ class CommonFunctionalityViewsetMixin:
     - Allowed http methods
     Inherit from this class to avoid code repetition.
     """
-    http_method_names = ['get']
-    filter_field = 'name'
+
+    http_method_names = ["get"]
+    filter_field = "name"
 
     def get_queryset(self):
         queryset = super().get_queryset()
-        if (filter_field_value := self.request.query_params.get('contains')):
-            return queryset.filter(**{f'{self.filter_field}__contains': filter_field_value})
+        if filter_field_value := self.request.query_params.get("contains"):
+            return queryset.filter(
+                **{f"{self.filter_field}__contains": filter_field_value}
+            )
         return queryset
-  
-    
+
+
 class HandleNumericsSerializerMixin:
     """
     Mixin with common serialzier functionality:
@@ -24,10 +27,11 @@ class HandleNumericsSerializerMixin:
     Convert them to `None`.
     Inherit from this class to avoid code repetition.
     """
-    numeric_fields_as_strings = []    
+
+    numeric_fields_as_strings = []
 
     def to_internal_value(self, data):
         for field in self.numeric_fields_as_strings:
-            if data.get(field) in ['unknown', 'n/a']:
+            if data.get(field) in ["unknown", "n/a"]:
                 data[field] = None
         return super().to_internal_value(data)

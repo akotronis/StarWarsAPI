@@ -1,9 +1,9 @@
-import functools
-import os
-import sqlparse
-import time
+# import functools
+# import os
+# import sqlparse
+# import time
 
-from django.db import connection
+# from django.db import connection
 
 
 def format_elapsed_time(elapsed_time):
@@ -18,7 +18,8 @@ def format_elapsed_time(elapsed_time):
     """
     hours, minutes = map(int, [elapsed_time // 3600, (elapsed_time % 3600) // 60])
     seconds = elapsed_time % 60
-    return f'{hours}h:{minutes}m:{seconds:.3f}s'
+    return f"{hours}h:{minutes}m:{seconds:.3f}s"
+
 
 ############################################################################################
 ########### DEBUGGER DECORATOR FOR DEV PURPOSES. COMMENT OUT FOR COVERAGE REPORT ###########
