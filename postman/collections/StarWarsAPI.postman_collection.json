@@ -1,0 +1,152 @@
+{
+	"info": {
+		"_postman_id": "3df675d5-03cf-4988-a442-9fc9425d566e",
+		"name": "StarWarsAPI",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "14603057"
+	},
+	"item": [
+		{
+			"name": "SWAPI",
+			"item": [
+				{
+					"name": "Schemas",
+					"item": [
+						{
+							"name": "Films Schema",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{SWAPI-URL}}/films/schema",
+									"host": [
+										"{{SWAPI-URL}}"
+									],
+									"path": [
+										"films",
+										"schema"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Characters Schema",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{SWAPI-URL}}/people/schema",
+									"host": [
+										"{{SWAPI-URL}}"
+									],
+									"path": [
+										"people",
+										"schema"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Starships Schema",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{SWAPI-URL}}/starships/schema",
+									"host": [
+										"{{SWAPI-URL}}"
+									],
+									"path": [
+										"starships",
+										"schema"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Resources",
+					"item": [
+						{
+							"name": "Films",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{SWAPI-URL}}/films",
+									"host": [
+										"{{SWAPI-URL}}"
+									],
+									"path": [
+										"films"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Characters",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{SWAPI-URL}}/people",
+									"host": [
+										"{{SWAPI-URL}}"
+									],
+									"path": [
+										"people"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Starships",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{SWAPI-URL}}/starships",
+									"host": [
+										"{{SWAPI-URL}}"
+									],
+									"path": [
+										"starships"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Django",
+			"item": [
+				{
+					"name": "Films",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{SWAPI-URL}}/films",
+							"host": [
+								"{{SWAPI-URL}}"
+							],
+							"path": [
+								"films"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	]
+}
