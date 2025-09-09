@@ -135,12 +135,63 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{SWAPI-URL}}/films",
+							"raw": "{{Django-URL}}/films",
 							"host": [
-								"{{SWAPI-URL}}"
+								"{{Django-URL}}"
 							],
 							"path": [
 								"films"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Characters",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{Django-URL}}/characters",
+							"host": [
+								"{{Django-URL}}"
+							],
+							"path": [
+								"characters"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Starships",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{Django-URL}}/starships",
+							"host": [
+								"{{Django-URL}}"
+							],
+							"path": [
+								"starships"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "SWAPI-Fetch-Populate",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{Django-URL}}/swapi-fetch-populate",
+							"host": [
+								"{{Django-URL}}"
+							],
+							"path": [
+								"swapi-fetch-populate"
 							]
 						}
 					},
