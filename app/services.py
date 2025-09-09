@@ -1,3 +1,4 @@
+import asyncio
 import functools
 
 from django.db import Error as DBError
@@ -6,6 +7,8 @@ from requests.exceptions import RequestException
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
+
+import swapi.utils
 
 from . import clients, models
 
@@ -39,6 +42,108 @@ def fetch_and_validate_data(url, serializer):
         ]
         raise ValidationError(error_message)
     return serializer_instance.validated_data
+
+
+async def fetch_and_validate_data_async(url, srlz):
+    """
+    Asynchronously fetch and validate data from a URL using a serializer.
+
+    This function runs the synchronous `fetch_and_validate_data` function in a separate
+    thread to avoid blocking the async event loop.
+
+    Args:
+        url (str): The URL to fetch data from.
+        srlz (Serializer): Django REST Framework serializer class for validation.
+
+    Returns:
+        Any: The validated data returned by `fetch_and_validate_data`.
+    """
+    return await asyncio.to_thread(fetch_and_validate_data, url, srlz)
+
+
+async def fetch_and_validate_all_data_async(urls, srlzs):
+    """
+    Asynchronously fetch and validate multiple data sources concurrently.
+
+    This function executes multiple `fetch_and_validate_data_async` operations
+    in parallel using asyncio.gather, improving performance for multiple resources.
+
+    Args:
+        urls (list[str]): List of URLs to fetch data from.
+        srlzs (list[Serializer]): List of serializer classes corresponding to each URL.
+
+    Returns:
+        list: List of validated data results in the same order as input URLs.
+    """
+    return await asyncio.gather(
+        *[fetch_and_validate_data_async(url, srlz) for url, srlz in zip(urls, srlzs)]
+    )
+
+
+def fetch_and_validate_all_data_in_threads(urls, srlzs):
+    """
+    Synchronous wrapper to fetch and validate multiple data sources using threads.
+
+    This function provides a synchronous interface to the async operations.
+    To be called from synchronous code while still benefiting from concurrent execution.
+
+    Args:
+        urls (list[str]): List of URLs to fetch data from.
+        srlzs (list[Serializer]): List of serializer classes corresponding to each URL.
+
+    Returns:
+        list: List of validated data results in the same order as input URLs.
+    """
+    return asyncio.run(fetch_and_validate_all_data_async(urls, srlzs))
+
+
+def make_fetch_populate_report(
+    films_data,
+    characters_data,
+    starships_data,
+    fetch_elapsed,
+    populate_elapsed,
+    threads=False,
+):
+    """
+    Generate performance report for SWAPI data fetch and database population.
+
+    Args:
+        films_data (list[dict]): List of film data dictionaries fetched from SWAPI.
+        characters_data (list[dict]): List of character data dictionaries fetched from SWAPI.
+        starships_data (list[dict]): List of starship data dictionaries fetched from SWAPI.
+        fetch_elapsed (float): Time elapsed (in seconds) for fetching data from SWAPI.
+        populate_elapsed (float): Time elapsed (in seconds) for populating the database.
+        threads (bool, optional): Whether threaded fetching was used. Defaults to False.
+
+    Returns:
+        dict: A structured report containing:
+            - Details about the fetch operation
+            - Details about the database population
+            - Information about the fetch methodology (Used threads or not)
+    """
+    managers = [
+        models.Film.objects,
+        models.Character.objects,
+        models.Starship.objects,
+    ]
+    resource_names = ["Films", "Characters", "Starships"]
+    model_counts = dict(zip(resource_names, map(lambda obj: obj.count(), managers)))
+    fetched_data = [films_data, characters_data, starships_data]
+    api_counts = dict(zip(resource_names, map(len, fetched_data)))
+    return {
+        "Fetched SWAPI data successfully": {
+            "time": swapi.utils.format_elapsed_time(fetch_elapsed),
+            "counts": api_counts,
+        },
+        "Populated database successfully": {
+            "time": swapi.utils.format_elapsed_time(populate_elapsed),
+            "counts": model_counts,
+        },
+        "Fetch type": {
+            "threaded": threads,
+        },
+    }
 
 
 def create_films(films_data):
