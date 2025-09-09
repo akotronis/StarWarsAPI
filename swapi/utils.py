@@ -1,3 +1,4 @@
+import collections
 # import functools
 # import os
 # import time
@@ -19,6 +20,41 @@ def format_elapsed_time(elapsed_time):
     hours, minutes = map(int, [elapsed_time // 3600, (elapsed_time % 3600) // 60])
     seconds = elapsed_time % 60
     return f"{hours}h:{minutes}m:{seconds:.3f}s"
+
+
+def validate_from_request(serializer_cls, request, *, attr='data', instance=None, data=None, **kwargs):
+    """
+    Instantiate, validate, and return a serializer's validated data from a request.
+    
+    This helper function simplifies the process of validating request data using
+    Django REST Framework serializers while automatically handling the request context.
+    
+    Args:
+        serializer_cls (Serializer): The DRF serializer class to use for validation.
+        request (HttpRequest): The Django request object containing the data to validate.
+        attr (str, optional): The request attribute to extract data from. 
+            Must be either 'data' (for request body) or 'query_params' (for URL parameters).
+            Defaults to 'data'.
+        instance (Model, optional): Existing model instance for update operations.
+            Ignored when attr='query_params'. Defaults to None.
+        data (dict, optional): Direct data to validate instead of extracting from request.
+            If provided, overrides the attr parameter. Defaults to None.
+        **kwargs: Additional keyword arguments to pass to the serializer constructor.
+    
+    Returns:
+        OrderedDict: The validated data from the serializer.
+    
+    Raises:
+        ValidationError: If the serializer validation fails.
+    """
+    if attr not in ['data', 'query_params']:
+        return collections.OrderedDict()
+    instance = None if attr == 'query_params' else instance
+    input_data = data or getattr(request, attr, {})
+    serializer = serializer_cls(instance=instance, data=input_data, context={'request': request}, **kwargs)
+    serializer.is_valid(raise_exception=True)
+    validated_data = serializer.validated_data
+    return validated_data
 
 
 ############################################################################################
