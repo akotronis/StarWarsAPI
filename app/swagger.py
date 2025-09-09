@@ -26,3 +26,12 @@ CHARACTERS_QUERY_PARAMS = STARSHIPS_QUERY_PARAMS = [
     PAGE_QUERY_PARAM,
     NAME_CONTAINS_QUERY_PARAM,
 ]
+
+FETCH_POPULATE_QUERY_PARAMS = [
+    OpenApiParameter(
+        name="threads",
+        type=bool,
+        required=False,
+        description="With `True`, fetches the SWAPI data in a separate thread per resource to optimize performance",
+    ),
+]
