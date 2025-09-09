@@ -72,6 +72,9 @@
 #### SWAPI Fetch Populate Success
 <p><img src="./resources/swapi-fetch-populate-success.png" alt="SWAPI Fetch Populate Success" width="800"/></p>
 
+#### SWAPI Fetch Populate (Threaded) Success
+<p><img src="./resources/swapi-fetch-populate-threaded-success.png" alt="SWAPI Fetch Populate (Threaded) Success" width="800"/></p>
+
 #### SWAPI Fetch Populate Validation Errors
 <p><img src="./resources/swapi-fetch-populate-validation-errors.png" alt="SWAPI Fetch Populate Validation Errors" width="800"/></p>
 
