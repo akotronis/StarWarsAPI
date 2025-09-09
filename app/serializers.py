@@ -62,3 +62,12 @@ class SWAPIStarshipSerializer(
     pilots = serializers.ListField(
         child=serializers.URLField(), required=False, source="characters"
     )
+
+
+class ThreadsQueryParamSerializer(serializers.Serializer):
+    """
+    Serializer validating "threads" query param indicating whether
+    the SWAPI data fetch should be done in a separate thread per
+    resource to optimize performance, or not.
+    """
+    threads = serializers.BooleanField(default=None, allow_null=True)
