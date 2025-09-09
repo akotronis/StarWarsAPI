@@ -60,49 +60,52 @@ class StarshipViewSet(mixins.CommonFunctionalityViewsetMixin, viewsets.ModelView
     queryset = models.Starship.objects.all().prefetch_related("films", "characters")
 
 
-@extend_schema(description=" ", tags=["Action: Fetch and populate local database"])
+@extend_schema(
+    description='Fetch resources **"films, characters, starships"** from SWAPI and populate database',
+    tags=["Action: Fetch and populate local database"],
+)
+@extend_schema_view(list=extend_schema(parameters=swagger.FETCH_POPULATE_QUERY_PARAMS))
 class SWAPIFetchPopulateView(viewsets.ViewSet):
     """
-    Fetch resources "films, characters, starships" from SWAPI and populate database
+    Fetch resources "films, characters, starships" from SWAPI and populate database.
+    Use "threads=true" to fetch SWAPI data in a separate thread per resource for optimized performance.
     """
+
+    swapi_urls = [
+        constants.SWAPI_FILMS_URL,
+        constants.SWAPI_CHARACTERS_URL,
+        constants.SWAPI_STARSHIPS_URL,
+    ]
+    swapi_serializers = [
+        serializers.SWAPIFilmSerializer,
+        serializers.SWAPICharacterSerializer,
+        serializers.SWAPIStarshipSerializer,
+    ]
 
     @services.fetch_populate_exception_handler
     def list(self, request):
         # Fetch SWAPI data
         fetch_start_time = time.time()
-        films_data = services.fetch_and_validate_data(
-            constants.SWAPI_FILMS_URL, serializers.SWAPIFilmSerializer
+        qparams = swapi.utils.validate_from_request(
+            serializers.ThreadsQueryParamSerializer, self.request, attr="query_params"
         )
-        characters_data = services.fetch_and_validate_data(
-            constants.SWAPI_CHARACTERS_URL, serializers.SWAPICharacterSerializer
-        )
-        starships_data = services.fetch_and_validate_data(
-            constants.SWAPI_STARSHIPS_URL, serializers.SWAPIStarshipSerializer
-        )
+        if threads := qparams.get("threads"):
+            fetched_data = services.fetch_and_validate_all_data_in_threads(
+                self.swapi_urls, self.swapi_serializers
+            )
+        else:
+            fetched_data = [
+                services.fetch_and_validate_data(url, srlz)
+                for url, srlz in zip(self.swapi_urls, self.swapi_serializers)
+            ]
         fetch_elapsed = time.time() - fetch_start_time
 
         # Populate database
         populate_start_time = time.time()
-        services.populate_database(films_data, characters_data, starships_data)
+        services.populate_database(*fetched_data)
         populate_elapsed = time.time() - populate_start_time
 
-        resource_names = ["Films", "Characters", "Starships"]
-        managers = [
-            models.Film.objects,
-            models.Character.objects,
-            models.Starship.objects,
-        ]
-        model_counts = dict(zip(resource_names, map(lambda obj: obj.count(), managers)))
-        fetched_data = [films_data, characters_data, starships_data]
-        api_counts = dict(zip(resource_names, map(len, fetched_data)))
-        report = {
-            "Fetched SWAPI data successfully": {
-                "time": swapi.utils.format_elapsed_time(fetch_elapsed),
-                "counts": model_counts,
-            },
-            "Populated database successfully": {
-                "time": swapi.utils.format_elapsed_time(populate_elapsed),
-                "counts": api_counts,
-            },
-        }
+        report = services.make_fetch_populate_report(
+            *fetched_data, fetch_elapsed, populate_elapsed, threads
+        )
         return Response(report)
