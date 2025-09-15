@@ -1,6 +1,7 @@
 # Star Wars API
 
-## Develpment Workflow
+<details>
+<summary><h2 style="display: inline;">Develpment Workflow</h2></summary>
 
 ### uv installation
 - Install uv (Linux/Git Bash): `$ curl -LsSf https://astral.sh/uv/install.sh | sh`
@@ -42,3 +43,17 @@
 ### Tests and coverage report
 - Run tests and create coverage html report: `..StarWarsAPI$ uv run coverage run manage.py test && uv run coverage html`
 - Inspect _../StartWarsAPI/htmlcov/index.html_ coverage report
+</details>
+
+<details>
+<summary><h2 style="display: inline;">CI/CD</h2></summary>
+
+### Secrets
+On **Gihub**:
+- Click on _Settings_ tab on the project repo
+- In the left sidebar, click _on Secrets and variables > Actions_
+- Click the _New repository secret_ button
+- Example:
+    - Add _SECRET_KEY_ and its value
+    - Reference the secret inside workflow file: `..gihub/workflows/my-workflow-file.yml` with `${{ secrets.SECRET_KEY }}`
+</details>
