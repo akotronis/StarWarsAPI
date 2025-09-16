@@ -16,7 +16,7 @@ class FilmModelTest(TestCase):
         self.assertEqual(film.episode_id, 4)
         self.assertEqual(
             str(film),
-            "(1) Title: A New Hope, Director: George Lucas, Release date: 1977-05-25",
+            f"({film.pk}) Title: A New Hope, Director: George Lucas, Release date: 1977-05-25",
         )
 
     def test_film_optional_fields(self):
@@ -37,7 +37,7 @@ class CharacterModelTest(TestCase):
         self.assertEqual(character.name, "Luke Skywalker")
         self.assertEqual(character.height, 172.5)
         self.assertEqual(
-            str(character), "(1) Name: Luke Skywalker, Gender: male, Height: 172.5"
+            str(character), f"({character.pk}) Name: Luke Skywalker, Gender: male, Height: 172.5"
         )
 
     def test_character_null_height(self):
@@ -58,7 +58,7 @@ class StarshipModelTest(TestCase):
         self.assertEqual(starship.name, "Millennium Falcon")
         self.assertEqual(starship.cost_in_credits, 100000)
         self.assertEqual(
-            str(starship), "(1) Name: Millennium Falcon, Model: YT-1300 light freighter"
+            str(starship), f"({starship.pk}) Name: Millennium Falcon, Model: YT-1300 light freighter"
         )
 
     def test_starship_with_null_values(self):

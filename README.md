@@ -3,25 +3,34 @@
 <details>
 <summary><h2 style="display: inline;">Setup/Run and Testing Workflow</h2></summary>
 
-### uv installation
+<!-- ### uv installation
 - Install uv (Linux/Git Bash): `$ curl -LsSf https://astral.sh/uv/install.sh | sh`
 - Enable shell autocompletion for uv commands (sh) (Linux/Git Bash): `$ echo 'eval "$(uv generate-shell-completion bash)"' >> ~/.bashrc`
-- Check uv availability: `$ uv`
+- Check uv availability: `$ uv` -->
 
-### Clone project and sync dependencies
+### Clone project
 - Clone project: `git clone https://github.com/akotronis/StarWarsAPI.git` or `git clone git@github.com:akotronis/StarWarsAPI.git`
 - Go to cloned project folder: `$ cd StarWarsAPI`
-- Sync all dependencies: `..StarWarsAPI$ uv sync --all-extras`
 
-### Database migrations and superuser
-- Create database an tables:
-    - `..StarWarsAPI$ uv run python manage.py makemigrations`
-    - `..StarWarsAPI$ uv run python manage.py migrate`
-- Create superuser (Only for django admin): `..StarWarsAPI$ uv run python manage.py createsuperuser`
+### .env file
+- Create a _../StarWarsAPI/.env_ file
 
-### Django settings/launch app
-- Create a _secret_key_ and put it as value on the _SECRET_KEY_ variable of a _../StarWarsAPI/.env_ file: `..StarWarsAPI$ uv run python -c "import os; print(os.urandom(40).hex())"`
-- Run the server (accesible on _localhost:8000_): `$ uv run python manage.py runserver 8000`
+#### Django settings:
+Create a _secret_key_ and put it as value on the _SECRET_KEY_ variable of the _../StarWarsAPI/.env_ file: `..StarWarsAPI$ docker exec -it ctr-sw-back bash -c "python -c \"import os; print(os.urandom(40).hex())\""`
+
+#### Rest environment variables:
+Create environment variables as below (indicative values) and put them in the _../StarWarsAPI/.env_ file:
+- `POSTGRES_DB=db`
+- `POSTGRES_USER=admin`
+- `POSTGRES_PASSWORD=password`
+- `POSTGRES_HOST=host`
+- `POSTGRES_INTERNAL_PORT=5432`
+- `POSTGRES_EXTERNAL_PORT=5432`
+- `BACKEND_INTERNAL_PORT=8000`
+- `BACKEND_EXTERNAL_PORT=8000`
+
+### Launch the project
+- `..StarWarsAPI$ docker compose up -d`
 
 ### Urls
 #### Interfaces
@@ -38,8 +47,8 @@
 - `http://localhost:8001/api/swapi-fetch-populate`
 
 ### Tests and coverage report
-- Run tests and create coverage html report: `..StarWarsAPI$ uv run coverage run manage.py test && uv run coverage html`
-- Inspect _../StartWarsAPI/htmlcov/index.html_ coverage report
+- Run the tests with coverage and generate html report: `..StarWarsAPI$ docker exec -it ctr-sw-back bash -c "python -m coverage run manage.py test && python -m coverage html"`
+- Inspect _../StartWarsAPI/coverage/backend/htmlcov/index.html_ coverage report
 </details>
 
 <details>

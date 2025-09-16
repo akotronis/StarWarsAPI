@@ -15,7 +15,7 @@ class CommonFunctionalityViewsetMixin:
         queryset = super().get_queryset()
         if filter_field_value := self.request.query_params.get("contains"):
             return queryset.filter(
-                **{f"{self.filter_field}__contains": filter_field_value}
+                **{f"{self.filter_field}__icontains": filter_field_value}
             )
         return queryset
 

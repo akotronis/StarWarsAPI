@@ -1,0 +1,50 @@
+volumes:
+  sw-data:
+
+
+services:
+
+  srv-sw-db:
+    image: postgres:17
+    container_name: ctr-sw-db
+    restart: unless-stopped
+    volumes:
+      - sw-data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - ${POSTGRES_EXTERNAL_PORT}:${POSTGRES_INTERNAL_PORT}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d ${POSTGRES_DB} -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 8s
+      retries: 3
+      start_period: 5s
+
+  srv-sw-back:
+    build: ./backend
+    image: img-sw-back
+    container_name: ctr-sw-back
+    restart: always
+    ports:
+      - ${BACKEND_EXTERNAL_PORT}:${BACKEND_INTERNAL_PORT}
+    volumes:
+      - ./coverage/backend/htmlcov:/opt/backend/htmlcov
+    # ### FOR DEVELOPMENT ###
+      # - ./backend:/opt/backend
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_HOST=srv-sw-db
+    # command: ["python", "manage.py", "runserver", "0.0.0.0:${BACKEND_INTERNAL_PORT}"]
+    # healthcheck:
+    #   test: ["CMD", "curl", "-f", "http://localhost:${BACKEND_EXTERNAL_PORT}/admin"]
+    #   interval: 10s
+    #   timeout: 8s
+    #   retries: 3
+    #   start_period: 5s
+    depends_on:
+      srv-sw-db:
+        condition: service_healthy

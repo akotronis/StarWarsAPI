@@ -10,7 +10,7 @@ class Film(models.Model):
     swapi_url = models.URLField(blank=True, null=True)
     starships = models.ManyToManyField("Starship", blank=True, related_name="films")
     created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    updated_at = models.DateTimeField(auto_now=True) # svdfvdf
 
     def __str__(self):
         return f"({self.pk}) Title: {self.title}, Director: {self.director}, Release date: {self.release_date}"
