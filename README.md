@@ -97,3 +97,13 @@ Create environment variables as below (indicative values) and put them in the _.
 <p><img src="./resources/swagger.png" alt="Swagger" width="800"/></p>
 
 </details>
+
+<details>
+<summary><h2 style="display: inline;">CI screenshots</h2></summary>
+
+#### Github Actions CI output
+- Used [_Docker Compose Action_](https://github.com/marketplace/actions/docker-compose-action)
+<p><img src="./resources/dev-docker-ci.png" alt="Github Actions Result" width="800"/></p>
+<p><img src="./resources/dev-docker-ci-logs.png" alt="Github Actions Steps Logs" width="800"/></p>
+
+</details>
