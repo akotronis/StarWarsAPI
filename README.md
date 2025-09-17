@@ -88,3 +88,12 @@
 <p><img src="./resources/swagger.png" alt="Swagger" width="800"/></p>
 
 </details>
+
+<details>
+<summary><h2 style="display: inline;">CI screenshots</h2></summary>
+
+#### Github Actions CI output
+<p><img src="./resources/dev-ci.png" alt="Github Actions Result" width="800"/></p>
+<p><img src="./resources/dev-ci-logs.png" alt="Github Actions Steps Logs" width="800"/></p>
+
+</details>
