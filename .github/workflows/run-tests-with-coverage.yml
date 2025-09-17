@@ -1,4 +1,4 @@
-name: Django Test with Coverage
+name: Django Test with Coverage # Commit for workflow trigger
 run-name: ${{ github.actor }} is running Django tests with coverage 🚀
 on:
   push:
