@@ -4,7 +4,7 @@ import collections
 # import time
 
 # import sqlparse
-# from django.db import connection
+from django.db import connection
 
 
 def format_elapsed_time(elapsed_time):
@@ -55,6 +55,20 @@ def validate_from_request(serializer_cls, request, *, attr='data', instance=None
     serializer.is_valid(raise_exception=True)
     validated_data = serializer.validated_data
     return validated_data
+
+
+def get_postgres_max_connections():
+    """
+    Return maximum PostgreSQL connections or None if vendor is not PostgreSQL
+
+    Returns:
+        int | None: As above
+    """
+    if connection.vendor == 'postgresql':
+        with connection.cursor() as cursor:
+            cursor.execute('SHOW max_connections;')
+            result = cursor.fetchone()[0]
+            return int(result) if isinstance(result, str) and result.isdigit() else result
 
 
 ############################################################################################
