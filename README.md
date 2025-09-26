@@ -1,109 +1,70 @@
 # Star Wars API
 
-<details>
-<summary><h2 style="display: inline;">Setup/Run and Testing Workflow</h2></summary>
+This branch focuses on demonstrating the SWAPI data ingestion workflow under high load.  
+It does not cover setup, testing, or deployment instructions (those are detailed in other branches).  
+Instead, it implements a complete solution for stress-testing the pipeline using:
 
-<!-- ### uv installation
-- Install uv (Linux/Git Bash): `$ curl -LsSf https://astral.sh/uv/install.sh | sh`
-- Enable shell autocompletion for uv commands (sh) (Linux/Git Bash): `$ echo 'eval "$(uv generate-shell-completion bash)"' >> ~/.bashrc`
-- Check uv availability: `$ uv` -->
+- A mock SWAPI service implemented in FastAPI to simulate fast paginated responses on large resource numbers.
+- Threaded, page-by-page ingestion of resources to test concurrency and parallel database operations.
+- Bulk creation of entities and many-to-many relationships using a staged relationship table.
+- Indexed database columns to optimize join performance with entity tables.
+- Efficient handling of data validation, transactional inserts, and conflict resolution in through tables.
 
-### Clone project
-- Clone project: `git clone https://github.com/akotronis/StarWarsAPI.git` or `git clone git@github.com:akotronis/StarWarsAPI.git`
-- Go to cloned project folder: `$ cd StarWarsAPI`
+> The branch is intended for ***performance and workflow testing***, allowing evaluation of ingestion speed, memory usage, and the efficiency of staged table joins and bulk inserts under simulated high-load conditions.
 
-### .env file
-- Create a _../StarWarsAPI/.env_ file
-
-#### Django settings:
-Create a _secret_key_ and put it as value on the _SECRET_KEY_ variable of the _../StarWarsAPI/.env_ file: `..StarWarsAPI$ docker exec -it ctr-sw-back bash -c "python -c \"import os; print(os.urandom(40).hex())\""`
-
-#### Rest environment variables:
-Create environment variables as below (indicative values) and put them in the _../StarWarsAPI/.env_ file:
-- `POSTGRES_DB=db`
-- `POSTGRES_USER=admin`
-- `POSTGRES_PASSWORD=password`
-- `POSTGRES_HOST=host`
-- `POSTGRES_INTERNAL_PORT=5432`
-- `POSTGRES_EXTERNAL_PORT=5432`
-- `BACKEND_INTERNAL_PORT=8000`
-- `BACKEND_EXTERNAL_PORT=8000`
-
-### Launch the project
-- `..StarWarsAPI$ docker compose up -d`
-
-### Urls
-#### Interfaces
-- Django admin: `http://localhost:8000/admin`
-- Browser API: `http://localhost:8000/api`
-- Swagger: `http://localhost:8000/schema/swagger`
-
-#### Resources
-- Films: `http://localhost:8000/api/films`
-- Characters: `http://localhost:8000/api/characters`
-- Starships: `http://localhost:8000/api/starships`
-
-#### Fetch SWAPI data and populate database
-- `http://localhost:8001/api/swapi-fetch-populate`
-
-### Tests and coverage report
-- Run the tests with coverage and generate html report: `..StarWarsAPI$ docker exec -it ctr-sw-back bash -c "python -m coverage run manage.py test && python -m coverage html"`
-- Inspect _../StartWarsAPI/coverage/backend/htmlcov/index.html_ coverage report
-</details>
+***Disclaimer***  
+> This workflow is experimental and does not claim to represent an optimal implementation or guaranteed performance results.
 
 <details>
 <summary><h2 style="display: inline;">Design/Implementation details</h2></summary>
 
+### Staged Relationship Table
+- A single StagedRelationship table temporarily stores relationships between resources using SWAPI IDs (from_swapi_id, to_swapi_id).
+- This avoids keeping large mappings in memory, and the table is indexed for fast join operations.
+- After all entities are inserted, this table is used to populate the corresponding many-to-many through tables in bulk.
+
 ### Database schema
-- The SWAPI resource payloads suggests the object relations depicted in the below diagram ([DrawSQL](https://drawsql.app/teams/akotronis-team/diagrams/starwarsapi)), where:
-    - _Characters_ correspond to the _People_ SWAPI url resource and to the _"pilots"_ field in _Starships_ resource.
-    - _Selected_ fields are used (indicatively) for the models represenations.
-<p><img src="./resources/database-schema.png" alt="Database Schema" width="800"/></p>
+<p><img src="./resources/database-schema-staged.png" alt="Database Schema" width="800"/></p>
 
-### Implementation
-- Views/Serializers:
-    - Used Mixin Pattern to ensure DRY principle
-- Services:
-    - Used separate resource-specific creation functions to maintain clarity and avoid over-abstracting distinct domain logic.
-    - Traded temporary memory usage for database performance using in-memory mappings and bulk operations to minimize queries.
+### Parallel Page Ingestion
+- Resources are fetched page by page using a thread pool.
+- Each worker thread manages its own database connection lifecycle to prevent conflicts and leaks.
+- Validation and transformation of the fetched data is performed via DRF serializers.
+
+### Through Table Population
+- Once all entities are ingested, the system populates the many-to-many through tables by joining the staged relationship table with the entity tables.
+- This is done in a single bulk operation per resource type, using raw SQL inserts with ON CONFLICT DO NOTHING to efficiently handle potential duplicates.
+
+### Atomic Transactions
+- Each page ingestion and entity creation is wrapped in a transaction, ensuring data consistency and automatic rollback in case of errors.
+
+### Performance Considerations
+- Using a single indexed staged table reduces memory usage while maintaining efficient bulk inserts.
+- Threading ensures parallel fetches and reduces total ingestion time.
 </details>
 
 <details>
-<summary><h2 style="display: inline;">Coverage Report</h2></summary>
+<summary><h2 style="display: inline;">Flow</h2></summary>
 
-<p><img src="./resources/coverage-report.png" alt="Coverage Report" width="800"/></p>
+#### Description
+- Fetch pages of SWAPI resources in parallel.
+- Insert validated entities into the corresponding tables.
+- Store all relationships in the StagedRelationship table.
+- Populate many-to-many through tables using bulk inserts, joining with the entity tables.
 
+#### Diagram
+<p><img src="./resources/flow-diagram.png" alt="Flow diagram" width="500"/></p>
 </details>
 
 <details>
-<summary><h2 style="display: inline;">Sample API screenshots</h2></summary>
-
-#### SWAPI Fetch Populate Success
-<p><img src="./resources/swapi-fetch-populate-success.png" alt="SWAPI Fetch Populate Success" width="800"/></p>
+<summary><h2 style="display: inline;">API screenshots</h2></summary>
 
 #### SWAPI Fetch Populate (Threaded) Success
-<p><img src="./resources/swapi-fetch-populate-threaded-success.png" alt="SWAPI Fetch Populate (Threaded) Success" width="800"/></p>
+Results with:
+- **1.000.000** Film entities
+- **5.000.000** Character entities
+- **2.000.000** Starship entities
 
-#### SWAPI Fetch Populate Validation Errors
-<p><img src="./resources/swapi-fetch-populate-validation-errors.png" alt="SWAPI Fetch Populate Validation Errors" width="800"/></p>
-
-#### Films Paginated Response
-<p><img src="./resources/films-paginated-response.png" alt="Films Paginated Response" width="800"/></p>
-
-#### Films Filter Param Search
-<p><img src="./resources/films-filter-param-search.png" alt="Films Filter Param Search" width="800"/></p>
-
-#### Swagger
-<p><img src="./resources/swagger.png" alt="Swagger" width="800"/></p>
-
+<p><img src="./resources/swapi-fetch-populate-scale.png" alt="SWAPI Fetch Populate (Threaded) Success" width="800"/></p>
 </details>
 
-<details>
-<summary><h2 style="display: inline;">CI screenshots</h2></summary>
-
-#### Github Actions CI output
-- Used [_Docker Compose Action_](https://github.com/marketplace/actions/docker-compose-action)
-<p><img src="./resources/dev-docker-ci.png" alt="Github Actions Result" width="800"/></p>
-<p><img src="./resources/dev-docker-ci-logs.png" alt="Github Actions Steps Logs" width="800"/></p>
-
-</details>
