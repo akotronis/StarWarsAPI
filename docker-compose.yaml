@@ -33,7 +33,7 @@ services:
     volumes:
       - ./coverage/backend/htmlcov:/opt/backend/htmlcov
     # ### FOR DEVELOPMENT ###
-      # - ./backend:/opt/backend
+    #   - ./backend:/opt/backend
     env_file:
       - .env
     environment:
@@ -48,3 +48,14 @@ services:
     depends_on:
       srv-sw-db:
         condition: service_healthy
+
+  srv-sw-mock:
+    build: ./mockswapi
+    image: img-sw-mock
+    container_name: ctr-sw-mock
+    restart: always
+    ports:
+      - ${MOCKSWAPI_EXTERNAL_PORT}:${MOCKSWAPI_INTERNAL_PORT}
+    # volumes:
+    # ### FOR DEVELOPMENT ###
+    #   - ./mockswapi:/opt/mockswapi
