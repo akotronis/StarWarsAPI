@@ -22,7 +22,9 @@ class FilmViewSet(mixins.CommonFunctionalityViewsetMixin, viewsets.ModelViewSet)
     """
 
     serializer_class = serializers.FilmSerializer
-    queryset = models.Film.objects.all().prefetch_related("starships", "characters")
+    queryset = models.Film.objects.all().prefetch_related(
+        constants.ResourceEnum.STARSHIP.plural, constants.ResourceEnum.CHARACTER.plural
+    )
     filter_field = "title"
 
 
@@ -40,7 +42,9 @@ class CharacterViewSet(mixins.CommonFunctionalityViewsetMixin, viewsets.ModelVie
     """
 
     serializer_class = serializers.CharacterSerializer
-    queryset = models.Character.objects.all().prefetch_related("films", "starships")
+    queryset = models.Character.objects.all().prefetch_related(
+        constants.ResourceEnum.FILM.plural, constants.ResourceEnum.STARSHIP.plural
+    )
 
 
 @extend_schema(
@@ -57,55 +61,66 @@ class StarshipViewSet(mixins.CommonFunctionalityViewsetMixin, viewsets.ModelView
     """
 
     serializer_class = serializers.StarshipSerializer
-    queryset = models.Starship.objects.all().prefetch_related("films", "characters")
+    queryset = models.Starship.objects.all().prefetch_related(
+        constants.ResourceEnum.FILM.plural, constants.ResourceEnum.CHARACTER.plural
+    )
 
 
 @extend_schema(
     description='Fetch resources **"films, characters, starships"** from SWAPI and populate database',
     tags=["Action: Fetch and populate local database"],
 )
-@extend_schema_view(list=extend_schema(parameters=swagger.FETCH_POPULATE_QUERY_PARAMS))
 class SWAPIFetchPopulateView(viewsets.ViewSet):
     """
     Fetch resources "films, characters, starships" from SWAPI and populate database.
-    Use "threads=true" to fetch SWAPI data in a separate thread per resource for optimized performance.
+    Fetching/validation/database population is performed in threads for scaling.
     """
 
-    swapi_urls = [
-        constants.SWAPI_FILMS_URL,
-        constants.SWAPI_CHARACTERS_URL,
-        constants.SWAPI_STARSHIPS_URL,
+    swapi_managers = [
+        services.SWAPIFilmsManager,
+        services.SWAPICharactersManager,
+        services.SWAPIStarshipsManager,
     ]
     swapi_serializers = [
         serializers.SWAPIFilmSerializer,
         serializers.SWAPICharacterSerializer,
         serializers.SWAPIStarshipSerializer,
     ]
+    swapi_counts = [
+        constants.TOTAL_FILMS,
+        constants.TOTAL_CHARACTERS,
+        constants.TOTAL_STARSHIPS,
+    ]
 
-    @services.fetch_populate_exception_handler
+    # @services.fetch_populate_exception_handler
     def list(self, request):
-        # Fetch SWAPI data
-        fetch_start_time = time.time()
-        qparams = swapi.utils.validate_from_request(
-            serializers.ThreadsQueryParamSerializer, self.request, attr="query_params"
+        services.clear_tables()
+        durations = [
+            services.ingest_resource(mng, srlz)
+            for mng, srlz in zip(self.swapi_managers, self.swapi_serializers)
+        ]
+        names = map(lambda x: x.entity_model.__name__, self.swapi_managers)
+        counts = list(
+            map(lambda x: x.entity_model.objects.count(), self.swapi_managers)
         )
-        if threads := qparams.get("threads"):
-            fetched_data = services.fetch_and_validate_all_data_in_threads(
-                self.swapi_urls, self.swapi_serializers
+        resources_report = {
+            f"{name}s": {
+                "Count": info[0],
+                "Duration": swapi.utils.format_elapsed_time(info[1]),
+            }
+            for name, info in zip(names, zip(counts, durations))
+        }
+
+        through_tables_duration = services.threaded_through_tables_population()
+        through_tables_report = {
+            "Through Tables Duration": swapi.utils.format_elapsed_time(
+                through_tables_duration
             )
-        else:
-            fetched_data = [
-                services.fetch_and_validate_data(url, srlz)
-                for url, srlz in zip(self.swapi_urls, self.swapi_serializers)
-            ]
-        fetch_elapsed = time.time() - fetch_start_time
-
-        # Populate database
-        populate_start_time = time.time()
-        services.populate_database(*fetched_data)
-        populate_elapsed = time.time() - populate_start_time
-
-        report = services.make_fetch_populate_report(
-            *fetched_data, fetch_elapsed, populate_elapsed, threads
-        )
-        return Response(report)
+        }
+        total_report = {
+            "Total": {
+                "Count": sum(counts),
+                "Duration": swapi.utils.format_elapsed_time(sum(durations)),
+            }
+        }
+        return Response(resources_report | through_tables_report | total_report)

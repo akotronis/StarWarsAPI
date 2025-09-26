@@ -1,425 +1,361 @@
-import asyncio
 import functools
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 
+import swapi.utils
 from django.db import Error as DBError
-from django.db import transaction
+from django.db import close_old_connections, connection, transaction
 from requests.exceptions import RequestException
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 
-import swapi.utils
-
-from . import clients, models
+from . import clients, constants, models, utils
 
 
-def fetch_and_validate_data(url, serializer):
+def determine_max_worker_units():
     """
-    Fetch, validate and return data from SWAPI
+    Determine the maximum number of worker units that can be safely used 
+    based on the database's connection limits.
 
-    Args:
-        url (str): SWAPI resource url
-        serializer (Serializer): Django REST Framework serializer class
-            used to validate and transform the API response data
-
-    Raises:
-        ValidationError: Catch and reraise for more descriptive message
-            Include thew SWAPI resource thta caused the error along with
-            the error.
+    The function calculates half of the maximum PostgreSQL connections 
+    available (to leave room for other operations) and caps the result 
+    at a fixed threshold of workers to avoid oversubscription.
 
     Returns:
-        list[dict]: Validated data
+        int: The maximum number of worker units allowed.
     """
-    fetched_data = clients.get_swapi_data(url)
-    serializer_instance = serializer(data=fetched_data, many=True)
-    try:
-        serializer_instance.is_valid(raise_exception=True)
-    except ValidationError as e:
-        error_message = [
-            {"data": data, "error": error}
-            for data, error in zip(fetched_data, e.detail)
-            if error
-        ]
-        raise ValidationError(error_message)
-    return serializer_instance.validated_data
-
-
-async def fetch_and_validate_data_async(url, srlz):
-    """
-    Asynchronously fetch and validate data from a URL using a serializer.
-
-    This function runs the synchronous `fetch_and_validate_data` function in a separate
-    thread to avoid blocking the async event loop.
-
-    Args:
-        url (str): The URL to fetch data from.
-        srlz (Serializer): Django REST Framework serializer class for validation.
-
-    Returns:
-        Any: The validated data returned by `fetch_and_validate_data`.
-    """
-    return await asyncio.to_thread(fetch_and_validate_data, url, srlz)
-
-
-async def fetch_and_validate_all_data_async(urls, srlzs):
-    """
-    Asynchronously fetch and validate multiple data sources concurrently.
-
-    This function executes multiple `fetch_and_validate_data_async` operations
-    in parallel using asyncio.gather, improving performance for multiple resources.
-
-    Args:
-        urls (list[str]): List of URLs to fetch data from.
-        srlzs (list[Serializer]): List of serializer classes corresponding to each URL.
-
-    Returns:
-        list: List of validated data results in the same order as input URLs.
-    """
-    return await asyncio.gather(
-        *[fetch_and_validate_data_async(url, srlz) for url, srlz in zip(urls, srlzs)]
-    )
-
-
-def fetch_and_validate_all_data_in_threads(urls, srlzs):
-    """
-    Synchronous wrapper to fetch and validate multiple data sources using threads.
-
-    This function provides a synchronous interface to the async operations.
-    To be called from synchronous code while still benefiting from concurrent execution.
-
-    Args:
-        urls (list[str]): List of URLs to fetch data from.
-        srlzs (list[Serializer]): List of serializer classes corresponding to each URL.
-
-    Returns:
-        list: List of validated data results in the same order as input URLs.
-    """
-    return asyncio.run(fetch_and_validate_all_data_async(urls, srlzs))
-
-
-def make_fetch_populate_report(
-    films_data,
-    characters_data,
-    starships_data,
-    fetch_elapsed,
-    populate_elapsed,
-    threads=False,
-):
-    """
-    Generate performance report for SWAPI data fetch and database population.
-
-    Args:
-        films_data (list[dict]): List of film data dictionaries fetched from SWAPI.
-        characters_data (list[dict]): List of character data dictionaries fetched from SWAPI.
-        starships_data (list[dict]): List of starship data dictionaries fetched from SWAPI.
-        fetch_elapsed (float): Time elapsed (in seconds) for fetching data from SWAPI.
-        populate_elapsed (float): Time elapsed (in seconds) for populating the database.
-        threads (bool, optional): Whether threaded fetching was used. Defaults to False.
-
-    Returns:
-        dict: A structured report containing:
-            - Details about the fetch operation
-            - Details about the database population
-            - Information about the fetch methodology (Used threads or not)
-    """
-    managers = [
-        models.Film.objects,
-        models.Character.objects,
-        models.Starship.objects,
-    ]
-    resource_names = ["Films", "Characters", "Starships"]
-    model_counts = dict(zip(resource_names, map(lambda obj: obj.count(), managers)))
-    fetched_data = [films_data, characters_data, starships_data]
-    api_counts = dict(zip(resource_names, map(len, fetched_data)))
-    return {
-        "Fetched SWAPI data successfully": {
-            "time": swapi.utils.format_elapsed_time(fetch_elapsed),
-            "counts": api_counts,
-        },
-        "Populated database successfully": {
-            "time": swapi.utils.format_elapsed_time(populate_elapsed),
-            "counts": model_counts,
-        },
-        "Fetch type": {
-            "threaded": threads,
-        },
-    }
-
-
-def create_films(films_data):
-    """
-    Create Film objects in bulk from validated SWAPI data and return URL mappings.
-
-    Processes a list of film data dictionaries, creates Film model instances,
-    performs bulk database insertion, and returns a mapping of SWAPI URLs to
-    the created Film instances for relationship establishment. Uses safe field
-    access with .get() to handle missing data gracefully.
-
-    Args:
-        films_data (list[dict]): List of validated film data dictionaries from SWAPI.
-            Each dictionary should contain keys: 'title', 'episode_id', 'director',
-            'release_date', 'created', and 'swapi_url'. Missing optional fields will
-            be set to None.
-
-    Returns:
-        dict[str, Film]: Mapping of SWAPI URLs to created Film instances. The keys are SWAPI URLs
-        (str) and the values are the corresponding Film model instances. This mapping
-        is essential for establishing relationships with other entities (characters,
-        starships) that reference films by URL.
-
-    Notes:
-        - Uses bulk_create for optimal database performance
-        - Uses .get() for safe field access (missing fields become None)
-        - The 'swapi_url' field is required for the mapping functionality
-        - Expects validated data but handles missing optional fields gracefully
-        - The returned mapping is crucial for establishing many-to-many relationships
-    """
-    films_to_create = []
-    film_mappings = {}
-    fields = ["title", "episode_id", "director", "release_date", "created", "swapi_url"]
-
-    for film_data in films_data:
-        film = models.Film(**{field: film_data.get(field) for field in fields})
-        films_to_create.append(film)
-        film_mappings[film_data["swapi_url"]] = film
-
-    models.Film.objects.bulk_create(films_to_create)
-    return film_mappings
-
-
-def create_characters(characters_data):
-    """
-    Create Character objects in bulk from validated SWAPI data and return URL mappings.
-
-    Processes a list of character data dictionaries, creates Character model instances,
-    performs bulk database insertion, and returns a mapping of SWAPI URLs to
-    the created Character instances for relationship establishment. Uses safe field
-    access with .get() to handle missing data gracefully.
-
-    Args:
-        characters_data (list[dict]): List of validated character data dictionaries from SWAPI.
-            Each dictionary should contain keys: 'name', 'height', 'gender', 'created',
-            and 'swapi_url'. Missing optional fields will be set to None.
-
-    Returns:
-        dict[str, Character]: Mapping of SWAPI URLs to created Character instances. The keys are SWAPI URLs
-        (str) and the values are the corresponding Character model instances. This mapping
-        is essential for establishing relationships with other entities (films, starships)
-        that reference characters by URL.
-
-    Notes:
-        - Uses bulk_create for optimal database performance
-        - Uses .get() for safe field access (missing fields become None)
-        - The 'swapi_url' field is required for the mapping functionality
-        - Expects validated data but handles missing optional fields gracefully
-        - The returned mapping is crucial for establishing many-to-many relationships
-    """
-    characters_to_create = []
-    character_mappings = {}
-    fields = ["name", "height", "gender", "created", "swapi_url"]
-
-    for character_data in characters_data:
-        character = models.Character(
-            **{field: character_data.get(field) for field in fields}
-        )
-        characters_to_create.append(character)
-        character_mappings[character_data["swapi_url"]] = character
-
-    models.Character.objects.bulk_create(characters_to_create)
-    return character_mappings
-
-
-def create_starships(starships_data):
-    """
-    Create Starship objects in bulk from validated SWAPI data and return URL mappings.
-
-    Processes a list of starship data dictionaries, creates Starship model instances,
-    performs bulk database insertion, and returns a mapping of SWAPI URLs to
-    the created Starship instances for relationship establishment. Uses safe field
-    access with .get() to handle missing data gracefully.
-
-    Args:
-        starships_data (list[dict]): List of validated starship data dictionaries from SWAPI.
-            Each dictionary should contain keys: 'name', 'model', 'cost_in_credits',
-            'hyperdrive_rating', 'created', and 'swapi_url'. Missing optional fields will
-            be set to None.
-
-    Returns:
-        dict: Mapping of SWAPI URLs to created Starship instances. The keys are SWAPI URLs
-        (str) and the values are the corresponding Starship model instances. This mapping
-        is essential for establishing relationships with other entities (films, characters)
-        that reference starships by URL.
-
-    Notes:
-        - Uses bulk_create for optimal database performance
-        - Uses .get() for safe field access (missing fields become None)
-        - The 'swapi_url' field is required for the mapping functionality
-        - Expects validated data but handles missing optional fields gracefully
-        - The returned mapping is crucial for establishing many-to-many relationships
-    """
-    starships_to_create = []
-    starship_mappings = {}
-    fields = [
-        "name",
-        "model",
-        "cost_in_credits",
-        "hyperdrive_rating",
-        "created",
-        "swapi_url",
-    ]
-    for starship_data in starships_data:
-        starship = models.Starship(
-            **{field: starship_data.get(field) for field in fields}
-        )
-        starships_to_create.append(starship)
-        starship_mappings[starship_data["swapi_url"]] = starship
-
-    models.Starship.objects.bulk_create(starships_to_create)
-    return starship_mappings
-
-
-def create_film_starship_relationships(films_data, film_mappings, starship_mappings):
-    """
-    Create many-to-many relationships between Films and Starships in bulk.
-
-    Processes film data to establish relationships between films and their associated
-    starships using URL mappings. Creates through model objects for bulk insertion.
-
-    Args:
-        films_data (list[dict]): List of film data dictionaries from SWAPI, each
-            containing a 'starships' list with starship URLs.
-        film_mappings (dict): Mapping of SWAPI URLs to Film model instances.
-        starship_mappings (dict): Mapping of SWAPI URLs to Starship model instances.
-
-    Notes:
-        - Only creates relationships if both film and starship exist in mappings
-        - Uses bulk_create for optimal performance
-        - Handles missing mappings gracefully (skips non-existent relationships)
-    """
-    film_starship_table = models.Film.starships.through
-    film_starship_objects = []
-
-    for film_data in films_data:
-        film = film_mappings.get(film_data["swapi_url"])
-        for starship_url in film_data.get("starships", []):
-            starship = starship_mappings.get(starship_url)
-            if starship := starship_mappings.get(starship_url):
-                film_starship_obj = film_starship_table(
-                    film_id=film.id, starship_id=starship.id
-                )
-                film_starship_objects.append(film_starship_obj)
-
-    if film_starship_objects:
-        film_starship_table.objects.bulk_create(film_starship_objects)
-
-
-def create_character_film_relationships(
-    characters_data, character_mappings, film_mappings
-):
-    """
-    Create many-to-many relationships between Characters and Films in bulk.
-
-    Processes character data to establish relationships between characters and their
-    associated films using URL mappings. Creates through model objects for bulk insertion.
-
-    Args:
-        characters_data (list[dict]): List of character data dictionaries from SWAPI,
-            each containing a 'films' list with film URLs.
-        character_mappings (dict): Mapping of SWAPI URLs to Character model instances.
-        film_mappings (dict): Mapping of SWAPI URLs to Film model instances.
-
-    Notes:
-        - Only creates relationships if both character and film exist in mappings
-        - Uses bulk_create for optimal performance
-        - Handles missing mappings gracefully (skips non-existent relationships)
-    """
-    character_film_table = models.Character.films.through
-    character_film_objects = []
-
-    for character_data in characters_data:
-        character = character_mappings.get(character_data["swapi_url"])
-        for film_url in character_data.get("films", []):
-            if film := film_mappings.get(film_url):
-                character_film_obj = character_film_table(
-                    character_id=character.pk, film_id=film.pk
-                )
-                character_film_objects.append(character_film_obj)
-
-    if character_film_objects:
-        character_film_table.objects.bulk_create(character_film_objects)
-
-
-def create_starship_character_relationships(
-    starships_data, starship_mappings, character_mappings
-):
-    """
-    Create many-to-many relationships between Starships and Characters in bulk.
-
-    Processes starship data to establish relationships between starships and their
-    associated characters (pilots) using URL mappings. Creates through model objects
-    for bulk insertion.
-
-    Args:
-        starships_data (list[dict]): List of starship data dictionaries from SWAPI,
-            each containing a 'characters' list with character URLs.
-        starship_mappings (dict): Mapping of SWAPI URLs to Starship model instances.
-        character_mappings (dict): Mapping of SWAPI URLs to Character model instances.
-
-    Notes:
-        - Only creates relationships if both starship and character exist in mappings
-        - Uses bulk_create for optimal performance
-        - Handles missing mappings gracefully (skips non-existent relationships)
-        - Note: In SWAPI, 'characters' field represents pilots of the starship
-    """
-    starship_character_table = models.Starship.characters.through
-    starship_character_objects = []
-
-    for starship_data in starships_data:
-        starship = starship_mappings.get(starship_data["swapi_url"])
-        for character_url in starship_data.get("characters", []):
-            character = character_mappings.get(character_url)
-            if character := character_mappings.get(character_url):
-                starship_character_obj = starship_character_table(
-                    starship_id=starship.id, character_id=character.id
-                )
-                starship_character_objects.append(starship_character_obj)
-
-    if starship_character_objects:
-        starship_character_table.objects.bulk_create(starship_character_objects)
+    threshold = 50
+    return min(swapi.utils.get_postgres_max_connections() // 2, threshold)
 
 
 def clear_tables():
     """
-    Function to clean tables for starting fresh
+    Truncate application tables to start with a clean database state.
+
+    This operation is performed directly at the database level for 
+    better performance than deleting rows through the ORM.
+
+    - RESTART IDENTITY: Resets sequences for all truncated tables.
+    - CASCADE: Ensures dependent tables are also truncated.
+
+    Tables truncated:
+        - StagedRelationship
+        - Film
+        - Character
+        - Starship
     """
-    for model in [models.Film, models.Character, models.Starship]:
-        model.objects.all().delete()
+    table_names = [
+        models.StagedRelationship._meta.db_table,
+        models.Film._meta.db_table,
+        models.Character._meta.db_table,
+        models.Starship._meta.db_table,
+    ]
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "TRUNCATE TABLE {} RESTART IDENTITY CASCADE;".format(", ".join(table_names))
+        )
 
 
-@transaction.atomic
-def populate_database(films_data, characters_data, starships_data):
+class SWAPIResourceManager:
     """
-    Function implementing logic for database population in transaction.
-    Rollback all database operaations if any error occurs.
-    Clears tables first for fresh initialization.
+    Base manager for handling ingestion of SWAPI resources.
+
+    Provides a template for fetching data from SWAPI, validating it,
+    persisting entity rows in the database, and staging many-to-many
+    relationships for later bulk insertion into through tables.
+
+    Subclasses must define:
+        - entity_model: Django model representing the resource.
+        - resource_url: Base URL of the SWAPI endpoint for this resource.
+        - resource_enum: Enum value representing this resource type.
+        - related_resource_enum: Enum value for the related resource type.
+        - total_resource_items: Total number of resources (for pagination).
+    """
+    entity_model = None
+    entity_fields = []
+    resource_url = None
+    resource_enum = None
+    related_resource_enum = None
+    total_resource_items = None
+    staged_relationship_table = models.StagedRelationship
+
+    def __init__(self, page, serializer):
+        """
+        Initialize a manager for a specific resource page.
+
+        Args:
+            page (int): Page number of the resource batch.
+            serializer (Serializer): DRF serializer used for validation.
+        """
+        self.entity_fields = self.entity_model.get_deserialized_fields()
+        self.page = page
+        self.serializer = serializer
+
+    @classmethod
+    def pages_count(cls):
+        """
+        Compute the number of pages for this resource.
+
+        Returns:
+            int: Total page count based on `total_resource_items`
+                 and configured `PAGE_SIZE`.
+        """
+        quotient = cls.total_resource_items // constants.PAGE_SIZE
+        if not cls.total_resource_items % constants.PAGE_SIZE:
+            return quotient
+        return quotient + 1
+
+    def batch_fetch_and_validate_resource_data(self):
+        """
+        Fetch and validate a batch of resource data from SWAPI.
+
+        The response data is validated against the provided serializer.
+        Any validation errors are re-raised with the offending payload.
+
+        Raises:
+            ValidationError: If validation fails, including details of
+                             which records caused errors.
+
+        Returns:
+            list[dict]: Validated resource data ready for persistence.
+        """
+        page_url = f"{self.resource_url}?page={self.page}"
+        fetched_data = clients.get_swapi_data(page_url)
+        serializer_instance = self.serializer(data=fetched_data, many=True)
+        try:
+            serializer_instance.is_valid(raise_exception=True)
+        except ValidationError as e:
+            error_message = [
+                {"data": data, "error": error}
+                for data, error in zip(fetched_data, e.detail)
+                if error
+            ]
+            raise ValidationError(error_message)
+        return serializer_instance.validated_data
+
+    def batch_create_entities(self, batch_validated_data):
+        """
+        Bulk insert entity rows for this resource.
+
+        Args:
+            batch_validated_data (list[dict]): Validated resource data.
+
+        Notes:
+            Uses `bulk_create` for performance. Does not trigger model
+            `save()` hooks or signals.
+        """
+        entities_to_create = []
+
+        for resource_data in batch_validated_data:
+            entity = self.entity_model(
+                **{field: resource_data.get(field) for field in self.entity_fields}
+            )
+            entities_to_create.append(entity)
+
+        self.entity_model.objects.bulk_create(entities_to_create)
+
+    def batch_create_staged_relationships(self, batch_validated_data):
+        """
+        Bulk insert staged relationships for this resource batch.
+
+        Relationships are stored in a temporary "staged" table, mapping
+        from SWAPI IDs to related SWAPI IDs. These are later resolved
+        to actual database IDs during through-table population.
+
+        Args:
+            batch_validated_data (list[dict]): Validated resource data.
+        """
+        staged_relationships_to_create = []
+        for resource_data in batch_validated_data:
+            related_resources_urls = resource_data.get(
+                self.related_resource_enum.plural, []
+            )
+            for related_resource_url in related_resources_urls:
+                staged_relationship = self.staged_relationship_table(
+                    **{
+                        "from_type": self.resource_enum.value,
+                        "from_swapi_id": resource_data["swapi_id"],
+                        "to_type": self.related_resource_enum.value,
+                        "to_swapi_id": utils.id_from_swapi_detail_url(
+                            related_resource_url
+                        ),
+                    }
+                )
+                staged_relationships_to_create.append(staged_relationship)
+        self.staged_relationship_table.objects.bulk_create(
+            staged_relationships_to_create
+        )
+
+    @classmethod
+    def batch_through_table_insert(cls):
+        """
+        Populate the many-to-many through table for this resource.
+
+        Uses a raw SQL INSERT ... SELECT ... statement for efficiency.
+        Only inserts relationships matching the configured
+        `resource_enum` and `related_resource_enum`.
+
+        Notes:
+            - Runs at the DB level for maximum performance.
+            - Skips potential duplicates via `ON CONFLICT DO NOTHING`.
+            - Prints thread ID and table name on completion.
+        """
+        thread_id = threading.get_ident()
+        staged_relationship_table_name = cls.staged_relationship_table._meta.db_table
+        entity_table_name = cls.entity_model._meta.db_table
+        related_entity_table_name = (
+            cls.entity_model.get_many_to_many_related_model_table_name()
+        )
+        related_entity_many_to_many_fieldname = (
+            cls.entity_model.get_many_to_many_fieldname()
+        )
+        through_table = getattr(
+            cls.entity_model, related_entity_many_to_many_fieldname
+        ).through
+        through_table_name = through_table._meta.db_table
+        through_table_column_names_joined = ", ".join(
+            [f"{cls.resource_enum.value}_id", f"{cls.related_resource_enum.value}_id"]
+        )
+
+        with connection.cursor() as cursor:
+            sql = f"""
+                INSERT INTO {through_table_name} ({through_table_column_names_joined})
+                SELECT from_.id, to_.id
+                FROM {staged_relationship_table_name} sr
+                JOIN {entity_table_name} from_ ON sr.from_swapi_id = from_.swapi_id
+                JOIN {related_entity_table_name} to_ ON sr.to_swapi_id = to_.swapi_id
+                WHERE sr.from_type = '{cls.resource_enum.value}' AND sr.to_type = '{cls.related_resource_enum.value}'
+                ON CONFLICT DO NOTHING
+            """
+            cursor.execute(sql)
+        print(f"Thread Id: {thread_id}, [{through_table_name}] finished population")
+
+    @transaction.atomic
+    def batch_fetch_validate_store_resource_data(self):
+        """
+        Full pipeline for one resource batch.
+
+        Steps:
+            1. Fetch and validate data from SWAPI.
+            2. Bulk insert entities into the entity table.
+            3. Bulk insert staged relationships into the staging table.
+
+        Notes:
+            Runs inside a transaction to ensure atomicity.
+        """
+        batch_validated_data = self.batch_fetch_and_validate_resource_data()
+        self.batch_create_entities(batch_validated_data)
+        self.batch_create_staged_relationships(batch_validated_data)
+
+
+class SWAPIFilmsManager(SWAPIResourceManager):
+    entity_model = models.Film
+    resource_url = constants.SWAPI_FILMS_URL
+    resource_enum = constants.ResourceEnum.FILM
+    related_resource_enum = constants.ResourceEnum.STARSHIP
+    total_resource_items = constants.TOTAL_FILMS
+
+
+class SWAPICharactersManager(SWAPIResourceManager):
+    entity_model = models.Character
+    resource_url = constants.SWAPI_CHARACTERS_URL
+    resource_enum = constants.ResourceEnum.CHARACTER
+    related_resource_enum = constants.ResourceEnum.FILM
+    total_resource_items = constants.TOTAL_CHARACTERS
+
+
+class SWAPIStarshipsManager(SWAPIResourceManager):
+    entity_model = models.Starship
+    resource_url = constants.SWAPI_STARSHIPS_URL
+    resource_enum = constants.ResourceEnum.STARSHIP
+    related_resource_enum = constants.ResourceEnum.CHARACTER
+    total_resource_items = constants.TOTAL_STARSHIPS
+
+
+def run_manager_for_page(manager_cls, page, serializer):
+    """
+    Worker function for one page.
+    Each thread gets its own DB connection lifecycle.
+    """
+    thread_id = threading.get_ident()
+    try:
+        close_old_connections()
+        manager = manager_cls(page, serializer)
+        manager.batch_fetch_validate_store_resource_data()
+        print(f"Thread Id: {thread_id}, [{manager_cls.__name__}] finished page {page}")
+    except Exception as e:
+        print(
+            f"Thread Id: {thread_id}, [{manager_cls.__name__}] error on page {page}: {e}"
+        )
+        raise
+    finally:
+        close_old_connections()
+
+
+def ingest_resource(manager_cls, serializer):
+    """
+    Ingest all pages for a given SWAPI resource type.
+
+    Executes the ingestion pipeline in parallel across multiple worker
+    threads. Each worker fetches, validates, and stores a single page of
+    data using the provided manager class.
 
     Args:
-        films_data (dict): Validated films SWAPI data
-        characters_data (dict): Validated characters SWAPI data
-        starships_data (dict): Validated starships SWAPI data
-    """
-    clear_tables()
+        manager_cls (type[SWAPIResourceManager]): Manager class handling
+            ingestion for a specific resource type (e.g., films, characters).
+        serializer (Serializer): DRF serializer for validating resource data.
 
-    film_mappings = create_films(films_data)
-    character_mappings = create_characters(characters_data)
-    starship_mappings = create_starships(starships_data)
-    create_film_starship_relationships(films_data, film_mappings, starship_mappings)
-    create_character_film_relationships(
-        characters_data, character_mappings, film_mappings
+    Returns:
+        float: Total elapsed time for ingestion in seconds.
+
+    Notes:
+        - The number of workers is capped using `determine_max_worker_units()`.
+        - Uses `ThreadPoolExecutor` for parallel page ingestion.
+        - Each worker manages its own database connection lifecycle.
+    """
+    start_time = time.time()
+
+    total_pages = manager_cls.pages_count()
+    max_workers = determine_max_worker_units()
+    print(
+        f"[{manager_cls.__name__}] ingesting {total_pages} pages with {max_workers} workers"
     )
-    create_starship_character_relationships(
-        starships_data, starship_mappings, character_mappings
+    runner_partial = functools.partial(
+        run_manager_for_page, manager_cls, serializer=serializer
     )
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        list(executor.map(runner_partial, range(1, total_pages + 1)))
+
+    return time.time() - start_time
+
+
+def threaded_through_tables_population():
+    """
+    Populate all many-to-many through tables in parallel.
+
+    Spawns one worker per resource type manager (Films, Characters,
+    Starships). Each worker resolves staged relationships into the
+    corresponding through table using bulk SQL inserts.
+
+    Returns:
+        float: Total elapsed time for through table population in seconds.
+
+    Notes:
+        - The number of workers is fixed to 3 (one per manager).
+        - Uses raw SQL inserts for performance.
+        - Skips duplicates via `ON CONFLICT DO NOTHING`.
+    """
+    start_time = time.time()
+    swapi_managers = [
+        SWAPIFilmsManager,
+        SWAPICharactersManager,
+        SWAPIStarshipsManager,
+    ]
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        list(executor.map(lambda mng: mng.batch_through_table_insert(), swapi_managers))
+    return time.time() - start_time
 
 
 def fetch_populate_exception_handler(func):
