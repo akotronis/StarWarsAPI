@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from . import mixins, models
+from . import constants, mixins, models
 
 
 class FilmSerializer(serializers.ModelSerializer):
@@ -25,7 +25,7 @@ class StarshipSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
-class SWAPIFilmSerializer(serializers.Serializer):
+class SWAPIFilmSerializer(mixins.SWAPIIdSerializerMixin, serializers.Serializer):
     title = serializers.CharField(required=False)
     episode_id = serializers.IntegerField(required=False)
     director = serializers.CharField(required=False)
@@ -36,7 +36,8 @@ class SWAPIFilmSerializer(serializers.Serializer):
 
 
 class SWAPICharacterSerializer(
-    mixins.HandleNumericsSerializerMixin, serializers.Serializer
+    mixins.CommonFunctionalitySWAPISerializerMixin,
+    serializers.Serializer,
 ):
     numeric_fields_as_strings = ["height"]
 
@@ -49,7 +50,8 @@ class SWAPICharacterSerializer(
 
 
 class SWAPIStarshipSerializer(
-    mixins.HandleNumericsSerializerMixin, serializers.Serializer
+    mixins.CommonFunctionalitySWAPISerializerMixin,
+    serializers.Serializer,
 ):
     numeric_fields_as_strings = ["cost_in_credits", "hyperdrive_rating"]
 
@@ -60,14 +62,7 @@ class SWAPIStarshipSerializer(
     created = serializers.DateTimeField(required=False)
     url = serializers.URLField(required=False, source="swapi_url")
     pilots = serializers.ListField(
-        child=serializers.URLField(), required=False, source="characters"
+        child=serializers.URLField(),
+        required=False,
+        source=constants.ResourceEnum.CHARACTER.plural,
     )
-
-
-class ThreadsQueryParamSerializer(serializers.Serializer):
-    """
-    Serializer validating "threads" query param indicating whether
-    the SWAPI data fetch should be done in a separate thread per
-    resource to optimize performance, or not.
-    """
-    threads = serializers.BooleanField(default=None, allow_null=True)
