@@ -1,3 +1,6 @@
+from . import utils
+
+
 class CommonFunctionalityViewsetMixin:
     """
     Mixin with common viewset functionality:
@@ -22,7 +25,7 @@ class CommonFunctionalityViewsetMixin:
 
 class HandleNumericsSerializerMixin:
     """
-    Mixin with common serialzier functionality:
+    Mixin with common serializer functionality:
     Handle numeric values coming in as non-digit strings denoting missing.
     Convert them to `None`.
     Inherit from this class to avoid code repetition.
@@ -35,3 +38,24 @@ class HandleNumericsSerializerMixin:
             if data.get(field) in ["unknown", "n/a"]:
                 data[field] = None
         return super().to_internal_value(data)
+
+
+class SWAPIIdSerializerMixin:
+    """
+    Mixin with common serializer functionality:
+    define "swapi_id" field from swapi)url "field"
+    """
+
+    def validate(self, data):
+        data["swapi_id"] = utils.id_from_swapi_detail_url(data["swapi_url"])
+        return super().validate(data)
+
+
+class CommonFunctionalitySWAPISerializerMixin(
+    HandleNumericsSerializerMixin, SWAPIIdSerializerMixin
+):
+    """
+    Collect individual Seralizer mixins to single serializer mixin
+    """
+
+    pass
