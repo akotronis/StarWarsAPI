@@ -30,10 +30,7 @@ SECRET_KEY = os.getenv("SECRET_KEY")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = [
-    '192.168.1.128',
-    '127.0.0.1'
-]
+ALLOWED_HOSTS = ["192.168.1.128", "127.0.0.1"]
 
 
 # Application definition
@@ -47,7 +44,12 @@ DJANGO_APPS = [
     "django.contrib.staticfiles",
 ]
 
-THIRD_PARTY_APPS = ["rest_framework", "drf_spectacular"]
+THIRD_PARTY_APPS = [
+    "rest_framework",
+    "drf_spectacular",
+    "psqlextra",
+    "django.contrib.postgres",
+]
 
 CUSTOM_APPS = [
     "app",
@@ -91,13 +93,15 @@ WSGI_APPLICATION = "swapi.wsgi.application"
 
 DATABASES = {
     "default": {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.getenv('POSTGRES_DB'),
-        'USER': os.getenv('POSTGRES_USER'),
-        'PASSWORD': os.getenv('POSTGRES_PASSWORD'),
-        'HOST': os.getenv('POSTGRES_HOST'),
-        'PORT': os.getenv('POSTGRES_PORT'), 
-
+        ### DEFAULT BACKEND ###
+        # "ENGINE": "django.db.backends.postgresql",
+        ### POSTGRES EXTRA BACKEND FOR PARTITIONING ###
+        "ENGINE": "psqlextra.backend",
+        "NAME": os.getenv("POSTGRES_DB"),
+        "USER": os.getenv("POSTGRES_USER"),
+        "PASSWORD": os.getenv("POSTGRES_PASSWORD"),
+        "HOST": os.getenv("POSTGRES_HOST"),
+        "PORT": os.getenv("POSTGRES_PORT"),
     }
 }
 

@@ -22,6 +22,8 @@ Instead, it implements a complete solution for stress-testing the pipeline using
 - A single StagedRelationship table temporarily stores relationships between resources using SWAPI IDs (from_swapi_id, to_swapi_id).
 - This avoids keeping large mappings in memory, and the table is indexed for fast join operations.
 - After all entities are inserted, this table is used to populate the corresponding many-to-many through tables in bulk.
+- In this branch we experiment with ***partitioning the StagedRelationship*** using the [django-postgres-extra](https://django-postgres-extra.readthedocs.io/en/latest/table_partitioning.html) package and following the [PostgreSQL Partitioning in Django](https://pganalyze.com/blog/postgresql-partitioning-django) resource.
+
 
 ### Database schema
 <p><img src="./resources/database-schema-staged.png" alt="Database Schema" width="800"/></p>
@@ -33,7 +35,7 @@ Instead, it implements a complete solution for stress-testing the pipeline using
 
 ### Through Table Population
 - Once all entities are ingested, the system populates the many-to-many through tables by joining the staged relationship table with the entity tables.
-- This is done in a single bulk operation per resource type, using raw SQL inserts with ON CONFLICT DO NOTHING to efficiently handle potential duplicates.
+- This is done in a single bulk operation per resource type, using raw SQL inserts.
 
 ### Atomic Transactions
 - Each page ingestion and entity creation is wrapped in a transaction, ensuring data consistency and automatic rollback in case of errors.
@@ -65,6 +67,8 @@ Results with:
 - **5.000.000** Character entities
 - **2.000.000** Starship entities
 
-<p><img src="./resources/swapi-fetch-populate-scale.png" alt="SWAPI Fetch Populate (Threaded) Success" width="800"/></p>
+As we can see partitioning in this case ***degrades performance instead of increasing it***
+
+<p><img src="./resources/swapi-fetch-populate-scale-partitioning.png" alt="SWAPI Fetch Populate (Threaded/Partitioning) Success" width="800"/></p>
 </details>
 

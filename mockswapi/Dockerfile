@@ -19,6 +19,6 @@ RUN pip install fastapi uvicorn
 COPY main.py /opt/mockswapi
 
 # Keep container open for development
-# CMD ["tail", "-f", "/dev/null"]
+CMD ["tail", "-f", "/dev/null"]
 # OR: Start server
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--reload"]
+# CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--reload"]

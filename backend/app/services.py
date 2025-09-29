@@ -46,16 +46,14 @@ def clear_tables():
         - Character
         - Starship
     """
-    table_names = [
-        models.StagedRelationship._meta.db_table,
-        models.Film._meta.db_table,
-        models.Character._meta.db_table,
-        models.Starship._meta.db_table,
+    db_models = [
+        models.StagedRelationship,
+        models.Film,
+        models.Character,
+        models.Starship,
     ]
-    with connection.cursor() as cursor:
-        cursor.execute(
-            "TRUNCATE TABLE {} RESTART IDENTITY CASCADE;".format(", ".join(table_names))
-        )
+    for model in db_models:
+        model.objects.truncate(cascade=True)
 
 
 class SWAPIResourceManager:
@@ -227,7 +225,6 @@ class SWAPIResourceManager:
                 JOIN {entity_table_name} from_ ON sr.from_swapi_id = from_.swapi_id
                 JOIN {related_entity_table_name} to_ ON sr.to_swapi_id = to_.swapi_id
                 WHERE sr.from_type = '{cls.resource_enum.value}' AND sr.to_type = '{cls.related_resource_enum.value}'
-                ON CONFLICT DO NOTHING
             """
             cursor.execute(sql)
         print(f"Thread Id: {thread_id}, [{through_table_name}] finished population")

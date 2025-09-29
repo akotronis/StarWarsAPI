@@ -1,4 +1,7 @@
 from django.db import models
+from psqlextra.manager import PostgresManager
+from psqlextra.models import PostgresPartitionedModel
+from psqlextra.types import PostgresPartitioningMethod
 
 from . import constants
 
@@ -13,6 +16,8 @@ class CommonFieldsAbstractModel(models.Model):
     created = models.DateTimeField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    objects = PostgresManager()
 
     class Meta:
         abstract = True
@@ -66,7 +71,7 @@ class Starship(CommonFieldsAbstractModel):
         return f"({self.pk}) Name: {self.name}, Model: {self.model}"
 
 
-class StagedRelationship(models.Model):
+class StagedRelationship(PostgresPartitionedModel):
     """
     Intermediate model holding relationships between resource swapi ids.
     Used to avoid keeping mappings defining resource relationships in memory.
@@ -79,3 +84,7 @@ class StagedRelationship(models.Model):
     from_swapi_id = models.BigIntegerField(db_index=True)
     to_type = models.CharField(max_length=20, choices=constants.ResourceEnum.choices)
     to_swapi_id = models.BigIntegerField(db_index=True)
+
+    class PartitioningMeta:
+        method = PostgresPartitioningMethod.LIST
+        key = ["from_type"]
