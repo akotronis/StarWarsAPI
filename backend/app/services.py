@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 import functools
 import threading
 import time
@@ -146,24 +148,30 @@ class SWAPIResourceManager:
 
     def batch_create_entities(self, batch_validated_data):
         """
-        Bulk insert entity rows for this resource.
+        Fast COPY-based bulk insert for entity rows.
 
         Args:
             batch_validated_data (list[dict]): Validated resource data.
-
-        Notes:
-            Uses `bulk_create` for performance. Does not trigger model
-            `save()` hooks or signals.
         """
-        entities_to_create = []
+        if not batch_validated_data:
+            return
 
-        for resource_data in batch_validated_data:
-            entity = self.entity_model(
-                **{field: resource_data.get(field) for field in self.entity_fields}
+        now = datetime.now(timezone.utc)
+        auto_datetime_columns = ["created_at", "updated_at"]
+
+        columns = self.entity_model.get_deserialized_fields() + auto_datetime_columns
+
+        rows = [
+            tuple(
+                resource_data.get(col, None)
+                if col not in ("created_at", "updated_at")
+                else now
+                for col in columns
             )
-            entities_to_create.append(entity)
+            for resource_data in batch_validated_data
+        ]
 
-        self.entity_model.objects.bulk_create(entities_to_create)
+        utils.copy_insert(self.entity_model, rows, columns)
 
     def batch_create_staged_relationships(self, batch_validated_data):
         """
@@ -176,26 +184,24 @@ class SWAPIResourceManager:
         Args:
             batch_validated_data (list[dict]): Validated resource data.
         """
-        staged_relationships_to_create = []
+        if not batch_validated_data:
+            return
+
+        columns = ["from_type", "from_swapi_id", "to_type", "to_swapi_id"]
+        rows = []
         for resource_data in batch_validated_data:
-            related_resources_urls = resource_data.get(
-                self.related_resource_enum.plural, []
-            )
-            for related_resource_url in related_resources_urls:
-                staged_relationship = self.staged_relationship_table(
-                    **{
-                        "from_type": self.resource_enum.value,
-                        "from_swapi_id": resource_data["swapi_id"],
-                        "to_type": self.related_resource_enum.value,
-                        "to_swapi_id": utils.id_from_swapi_detail_url(
-                            related_resource_url
-                        ),
-                    }
+            related_urls = resource_data.get(self.related_resource_enum.plural, [])
+            for related_url in related_urls:
+                rows.append(
+                    (
+                        self.resource_enum.value,
+                        resource_data["swapi_id"],
+                        self.related_resource_enum.value,
+                        utils.id_from_swapi_detail_url(related_url),
+                    )
                 )
-                staged_relationships_to_create.append(staged_relationship)
-        self.staged_relationship_table.objects.bulk_create(
-            staged_relationships_to_create
-        )
+
+        utils.copy_insert(self.staged_relationship_table, rows, columns)
 
     @classmethod
     def get_staged_relationship_table_current_id(cls, current_id):
@@ -215,7 +221,7 @@ class SWAPIResourceManager:
             int: The maximum staged relationship ID processed in the
                  last chunk, or the original `current_id` if no more
                  rows remain.
-        
+
         Notes:
             - Ensures forward progress through the staged table in
               chunked batches.
@@ -296,7 +302,7 @@ class SWAPIResourceManager:
             3. Bulk insert staged relationships into the staging table.
             4. Later, staged relationships are flushed into the through table
                using chunked raw SQL insertion.
-        
+
         Notes:
             Runs inside a transaction to ensure atomicity of entity
             and staged-relationship creation. Through-table population
