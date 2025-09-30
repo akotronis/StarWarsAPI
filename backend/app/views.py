@@ -110,6 +110,13 @@ class SWAPIFetchPopulateView(viewsets.ViewSet):
             }
             for name, info in zip(names, zip(counts, durations))
         }
+        total_entity_duration = sum(durations)
+        total_entity_report = {
+            "Entity Total (Fetch/Populate)": {
+                "Count": sum(counts),
+                "Duration": swapi.utils.format_elapsed_time(total_entity_duration),
+            }
+        }
 
         through_tables_duration = services.threaded_through_tables_population()
         through_tables_report = {
@@ -117,10 +124,15 @@ class SWAPIFetchPopulateView(viewsets.ViewSet):
                 through_tables_duration
             )
         }
+        total_duration = total_entity_duration + through_tables_duration
         total_report = {
             "Total": {
-                "Count": sum(counts),
-                "Duration": swapi.utils.format_elapsed_time(sum(durations)),
+                "Duration": swapi.utils.format_elapsed_time(total_duration),
             }
         }
-        return Response(resources_report | through_tables_report | total_report)
+        return Response(
+            resources_report
+            | total_entity_report
+            | through_tables_report
+            | total_report
+        )

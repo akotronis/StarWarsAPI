@@ -16,17 +16,17 @@ from . import clients, constants, models, utils
 
 def determine_max_worker_units():
     """
-    Determine the maximum number of worker units that can be safely used 
+    Determine the maximum number of worker units that can be safely used
     based on the database's connection limits.
 
-    The function calculates half of the maximum PostgreSQL connections 
-    available (to leave room for other operations) and caps the result 
+    The function calculates half of the maximum PostgreSQL connections
+    available (to leave room for other operations) and caps the result
     at a fixed threshold of workers to avoid oversubscription.
 
     Returns:
         int: The maximum number of worker units allowed.
     """
-    threshold = 50
+    threshold = constants.WORKER_THRESHOLD
     return min(swapi.utils.get_postgres_max_connections() // 2, threshold)
 
 
@@ -34,7 +34,7 @@ def clear_tables():
     """
     Truncate application tables to start with a clean database state.
 
-    This operation is performed directly at the database level for 
+    This operation is performed directly at the database level for
     better performance than deleting rows through the ORM.
 
     - RESTART IDENTITY: Resets sequences for all truncated tables.
@@ -64,7 +64,7 @@ class SWAPIResourceManager:
 
     Provides a template for fetching data from SWAPI, validating it,
     persisting entity rows in the database, and staging many-to-many
-    relationships for later bulk insertion into through tables.
+    relationships for later chunked insertion into through tables.
 
     Subclasses must define:
         - entity_model: Django model representing the resource.
@@ -73,13 +73,22 @@ class SWAPIResourceManager:
         - related_resource_enum: Enum value for the related resource type.
         - total_resource_items: Total number of resources (for pagination).
     """
+
     entity_model = None
     entity_fields = []
     resource_url = None
     resource_enum = None
     related_resource_enum = None
     total_resource_items = None
+    chunk_size = constants.CHUNK_SIZE
     staged_relationship_table = models.StagedRelationship
+    staged_relationship_table_name = staged_relationship_table._meta.db_table
+    insert_chunk_to_through_table_template = (
+        constants.INSERT_CHUNK_TO_THROUGH_TABLE_SQL_TEMPLATE
+    )
+    filtered_staged_relationships_table_max_id_sql_template = (
+        constants.FILTERED_STAGED_RELATIONSHIPS_TABLE_MAX_ID_SQL_TEMPLATE
+    )
 
     def __init__(self, page, serializer):
         """
@@ -189,21 +198,56 @@ class SWAPIResourceManager:
         )
 
     @classmethod
+    def get_staged_relationship_table_current_id(cls, current_id):
+        """
+        Get the next maximum staged relationship ID for this resource pair.
+
+        This method is used during chunked through-table population.
+        After each INSERT ... SELECT, we advance the `current_id` window
+        by querying the staged relationships table for the maximum ID
+        that matches the current resource/related-resource pair and is
+        greater than the provided `current_id`.
+
+        Args:
+            current_id (int): The last processed staged relationship ID.
+
+        Returns:
+            int: The maximum staged relationship ID processed in the
+                 last chunk, or the original `current_id` if no more
+                 rows remain.
+        
+        Notes:
+            - Ensures forward progress through the staged table in
+              chunked batches.
+            - Prevents reprocessing the same staged rows.
+        """
+        with connection.cursor() as cursor:
+            sql = cls.filtered_staged_relationships_table_max_id_sql_template.format(
+                cls.staged_relationship_table_name,
+                cls.resource_enum.value,
+                cls.related_resource_enum.value,
+                current_id,
+            )
+            cursor.execute(sql)
+            return next(iter(cursor.fetchone())) or current_id
+
+    @classmethod
     def batch_through_table_insert(cls):
         """
         Populate the many-to-many through table for this resource.
 
-        Uses a raw SQL INSERT ... SELECT ... statement for efficiency.
+        Uses a raw SQL INSERT ... SELECT ... statement with chunking for efficiency.
         Only inserts relationships matching the configured
         `resource_enum` and `related_resource_enum`.
 
         Notes:
-            - Runs at the DB level for maximum performance.
-            - Skips potential duplicates via `ON CONFLICT DO NOTHING`.
+            - Runs fully at the DB level for maximum performance.
+            - Inserts are performed in chunks of `chunk_size` to avoid
+              excessive memory or transaction overhead.
+            - Assumes no conflicts can occur.
             - Prints thread ID and table name on completion.
         """
         thread_id = threading.get_ident()
-        staged_relationship_table_name = cls.staged_relationship_table._meta.db_table
         entity_table_name = cls.entity_model._meta.db_table
         related_entity_table_name = (
             cls.entity_model.get_many_to_many_related_model_table_name()
@@ -219,17 +263,26 @@ class SWAPIResourceManager:
             [f"{cls.resource_enum.value}_id", f"{cls.related_resource_enum.value}_id"]
         )
 
-        with connection.cursor() as cursor:
-            sql = f"""
-                INSERT INTO {through_table_name} ({through_table_column_names_joined})
-                SELECT from_.id, to_.id
-                FROM {staged_relationship_table_name} sr
-                JOIN {entity_table_name} from_ ON sr.from_swapi_id = from_.swapi_id
-                JOIN {related_entity_table_name} to_ ON sr.to_swapi_id = to_.swapi_id
-                WHERE sr.from_type = '{cls.resource_enum.value}' AND sr.to_type = '{cls.related_resource_enum.value}'
-                ON CONFLICT DO NOTHING
-            """
-            cursor.execute(sql)
+        current_id = 0
+        while True:
+            close_old_connections()
+            with connection.cursor() as cursor:
+                sql = cls.insert_chunk_to_through_table_template.format(
+                    cls.staged_relationship_table_name,
+                    entity_table_name,
+                    related_entity_table_name,
+                    cls.resource_enum.value,
+                    cls.related_resource_enum.value,
+                    current_id,
+                    cls.chunk_size,
+                    through_table_name,
+                    through_table_column_names_joined,
+                )
+                cursor.execute(sql)
+            if cursor.rowcount == 0:
+                break
+
+            current_id = cls.get_staged_relationship_table_current_id(current_id)
         print(f"Thread Id: {thread_id}, [{through_table_name}] finished population")
 
     @transaction.atomic
@@ -241,9 +294,13 @@ class SWAPIResourceManager:
             1. Fetch and validate data from SWAPI.
             2. Bulk insert entities into the entity table.
             3. Bulk insert staged relationships into the staging table.
-
+            4. Later, staged relationships are flushed into the through table
+               using chunked raw SQL insertion.
+        
         Notes:
-            Runs inside a transaction to ensure atomicity.
+            Runs inside a transaction to ensure atomicity of entity
+            and staged-relationship creation. Through-table population
+            is handled separately in chunked SQL.
         """
         batch_validated_data = self.batch_fetch_and_validate_resource_data()
         self.batch_create_entities(batch_validated_data)
