@@ -72,3 +72,16 @@ As we can see partitioning in this case ***degrades performance instead of incre
 <p><img src="./resources/swapi-fetch-populate-scale-partitioning.png" alt="SWAPI Fetch Populate (Threaded/Partitioning) Success" width="800"/></p>
 </details>
 
+<details>
+<summary><h2 style="display: inline;">Partitioning steps</h2></summary>
+
+#### Migrations
+- `uv run python manage.py pgmakemigrations --name staged_relationship_partitioned`
+- `uv run python manage.py makemigrations --empty app --name define_partitions`
+- `uv run python manage.py migrate`
+
+#### SQL Checks (PostgreSQL)
+
+- Check Partitions: `SELECT inhrelid::regclass AS partition FROM pg_inherits WHERE inhparent = 'app_stagedrelationship'::regclass;`
+- Check Indexes: `SELECT tablename, indexname, indexdef FROM pg_indexes WHERE schemaname = 'public' AND tablename LIKE 'app_stagedrelationship%';`
+</details>
