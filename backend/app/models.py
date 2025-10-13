@@ -41,6 +41,10 @@ class Film(CommonFieldsAbstractModel):
     release_date = models.DateField(blank=True, null=True)
     starships = models.ManyToManyField("Starship", blank=True, related_name="films")
 
+    @property
+    def test_property(self):
+        return self.episode_id + 1000
+
     def __str__(self):
         return f"({self.pk}) Title: {self.title}, Director: {self.director}, Release date: {self.release_date}"
 
@@ -64,6 +68,14 @@ class Starship(CommonFieldsAbstractModel):
 
     def __str__(self):
         return f"({self.pk}) Name: {self.name}, Model: {self.model}"
+
+
+class TestFKRev(models.Model):
+    film = models.ForeignKey(Film, on_delete=models.CASCADE, related_name="testfks")
+
+
+class TestFKNoRev(models.Model):
+    film = models.ForeignKey(Film, on_delete=models.CASCADE)
 
 
 class StagedRelationship(models.Model):

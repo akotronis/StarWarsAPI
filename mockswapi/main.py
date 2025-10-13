@@ -14,10 +14,10 @@ app = FastAPI(title="Mock SWAPI Server")
 # ----------------------------
 # Configuration
 # ----------------------------
-TOTAL_FILMS = 1_000_000
-TOTAL_CHARACTERS = 5_000_000
-TOTAL_STARSHIPS = 2_000_000
-PAGE_SIZE = 2_000
+TOTAL_FILMS = 1_000
+TOTAL_CHARACTERS = 5_000
+TOTAL_STARSHIPS = 2_000
+PAGE_SIZE = 1_000
 
 
 # ----------------------------

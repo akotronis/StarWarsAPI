@@ -6,6 +6,9 @@ from . import constants, mixins, models
 class FilmSerializer(serializers.ModelSerializer):
     characters = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
 
+    testfks = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
+    test_property = serializers.ReadOnlyField()
+
     class Meta:
         model = models.Film
         fields = "__all__"
